@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kairō</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    
+    <!-- CodeJar for Editor Highlighting -->
+    <script type="module">
+        import {CodeJar} from 'https://cdn.jsdelivr.net/npm/codejar@3.7.0/codejar.min.js';
+        window.CodeJar = CodeJar;
+    </script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="/css/style.css">
+
+    <!-- Tailwind Config (Catppuccin) -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        rosewater: '#f5e0dc', flamingo: '#f2cdcd', pink: '#f5c2e7', mauve: '#cba6f7',
+                        red: '#f38ba8', maroon: '#eba0ac', peach: '#fab387', yellow: '#f9e2af',
+                        green: '#a6e3a1', teal: '#94e2d5', sky: '#89dceb', sapphire: '#74c7ec',
+                        blue: '#89b4fa', lavender: '#b4befe', text: '#cdd6f4', subtext1: '#bac2de',
+                        subtext0: '#a6adc8', overlay2: '#9399b2', overlay1: '#7f849c', overlay0: '#6c7086',
+                        surface2: '#585b70', surface1: '#45475a', surface0: '#313244', base: '#1e1e2e',
+                        mantle: '#181825', crust: '#11111b',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-base text-text font-sans antialiased h-screen flex overflow-hidden selection:bg-mauve selection:text-base">
+
+    <!-- Mobile Header -->
+    <div class="md:hidden fixed top-0 w-full h-14 bg-crust border-b border-surface0 z-50 flex items-center px-4 justify-between">
+        <div class="flex items-center gap-2">
+            <button id="mobile-menu-btn" class="p-2 text-subtext0 hover:text-mauve"><i data-lucide="menu"></i></button>
+            <span class="font-bold text-mauve">Kairō</span>
+        </div>
+        <div id="unsaved-indicator-mobile" class="hidden text-yellow text-xs"><i data-lucide="circle-dashed" class="animate-spin"></i></div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-64 bg-crust flex flex-col fixed md:relative h-full z-40 transform transition-transform duration-200">
+        <div class="h-14 flex items-center justify-end px-4 border-b border-surface0">
+            <button id="add-btn" class="p-1.5 rounded-md hover:bg-surface0 text-subtext0 hover:text-green transition-colors" title="Add File/Folder">
+                <i data-lucide="plus" class="w-5 h-5"></i>
+            </button>
+        </div>
+        
+        <!-- File Tree -->
+        <div id="file-tree" class="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar">
+            <!-- Rendered by JS -->
+        </div>
+    </aside>
+
+    <!-- Overlay for mobile sidebar -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden glass-overlay"></div>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full relative pt-14 md:pt-0 min-w-0 bg-base">
+        
+        <!-- Toolbar -->
+        <div class="h-14 border-b border-surface0 flex items-center justify-between px-6 bg-base/95 backdrop-blur z-20">
+            <div class="flex items-center gap-3 overflow-hidden">
+                <span id="current-filename" class="font-medium text-subtext1 truncate">Select a note...</span>
+                <span id="unsaved-indicator" class="hidden text-yellow transition-opacity" title="Unsaved changes">
+                    <i data-lucide="save" class="w-4 h-4 animate-pulse"></i>
+                </span>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button id="toggle-view-btn" class="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium bg-surface0 text-text hover:bg-surface1 transition-colors">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                    <span id="toggle-text">Preview</span>
+                </button>
+                <button id="delete-btn" class="p-2 rounded-md text-red hover:bg-red/10 transition-colors" title="Delete current item">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Editor/Preview Area -->
+        <div class="flex-1 relative overflow-hidden group">
+            
+            <!-- Editor (Raw) -->
+            <div id="editor-container" class="absolute inset-0 z-10 bg-base overflow-hidden hidden">
+                <div id="editor" class="w-full h-full p-8 font-mono text-sm leading-relaxed outline-none resize-none text-subtext0 custom-scrollbar"></div>
+            </div>
+
+            <!-- Preview (Rendered) -->
+            <div id="preview-container" class="absolute inset-0 z-0 overflow-y-auto custom-scrollbar p-6 md:p-12 pb-32">
+                 <article id="markdown-body" class="markdown-body max-w-4xl mx-auto"></article>
+            </div>
+
+            <!-- TOC Sidebar (Desktop Only, Preview Mode) -->
+            <div id="toc-sidebar" class="hidden lg:block absolute right-0 top-0 w-64 h-full p-6 overflow-y-auto pointer-events-none opacity-0 transition-opacity duration-300">
+                <div class="pointer-events-auto sticky top-4">
+                    <h3 class="text-sm font-bold text-mauve mb-3 uppercase tracking-wider">Contents</h3>
+                    <nav id="toc-nav" class="space-y-1 border-l border-surface1 pl-4 text-sm"></nav>
+                </div>
+            </div>
+
+            <!-- Empty State / Folder View -->
+            <div id="empty-state" class="absolute inset-0 z-20 bg-base flex flex-col items-center justify-center text-overlay1">
+                <i data-lucide="feather" class="w-16 h-16 mb-4 text-surface2"></i>
+                <p>Select a note to start writing</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-mantle border border-surface1 rounded-xl p-6 w-full max-w-md shadow-2xl transform scale-95 transition-all" id="modal-content">
+            <h3 class="text-lg font-bold text-lavender mb-4">Create New</h3>
+            <input type="text" id="new-item-input" class="w-full bg-surface0 border border-surface1 rounded-lg px-4 py-2 text-text focus:outline-none focus:border-mauve mb-2" placeholder="name or folder/ (ends with / for folder)">
+            <p class="text-xs text-overlay0 mb-6">Enter name. End with <code class="bg-surface0 px-1 rounded">/</code> to create a folder.</p>
+            <div class="flex justify-end gap-3">
+                <button id="modal-cancel" class="px-4 py-2 rounded-lg hover:bg-surface0 text-subtext0">Cancel</button>
+                <button id="modal-confirm" class="px-4 py-2 rounded-lg bg-mauve text-base font-bold hover:bg-mauve/90">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
