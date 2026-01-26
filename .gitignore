@@ -1,2 +1,39 @@
-notes
+# Binaries
 kairo
+kairo-*
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Coverage
+coverage.out
+coverage.html
+
+# Data directories (user data)
+data/
+
+# Downloaded assets (make assets) - not app.js which is source
+internal/server/frontend/static/js/*.min.js
+internal/server/frontend/static/js/tailwindcss.js
+internal/server/frontend/static/css/
+internal/server/frontend/static/fonts/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+debug
+*.log

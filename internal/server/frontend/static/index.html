@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kairō</title>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Icons & Libs -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+
+    <script type="module">
+        import {CodeJar} from 'https://cdn.jsdelivr.net/npm/codejar@3.7.0/codejar.min.js';
+        window.CodeJar = CodeJar;
+    </script>
+
+    <style>
+        /* Catppuccin Mocha Theme */
+        :root {
+            --rosewater: #f5e0dc; --flamingo: #f2cdcd; --pink: #f5c2e7;
+            --mauve: #cba6f7; --red: #f38ba8; --maroon: #eba0ac;
+            --peach: #fab387; --yellow: #f9e2af; --green: #a6e3a1;
+            --teal: #94e2d5; --sky: #89dceb; --sapphire: #74c7ec;
+            --blue: #89b4fa; --lavender: #b4befe; --text: #cdd6f4;
+            --subtext1: #bac2de; --subtext0: #a6adc8; --overlay2: #9399b2;
+            --overlay1: #7f849c; --surface1: #45475a;
+            --surface0: #313244; --base: #1e1e2e; --mantle: #181825; --crust: #11111b;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #11111b; }
+        ::-webkit-scrollbar-thumb { background: #313244; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #45475a; }
+
+        /* Editor */
+        #editor {
+            font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+            line-height: 1.6;
+            tab-size: 4;
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+            font-size: 16px;
+        }
+
+        /* Markdown syntax highlighting in editor */
+        #editor .hljs {
+            background: transparent !important;
+        }
+
+        /* Sidebar transitions */
+        #sidebar { 
+            transition: transform 0.2s ease-in-out, width 0.2s ease-in-out, margin-left 0.2s ease-in-out;
+        }
+        
+        /* Desktop sidebar collapsed state */
+        @media (min-width: 768px) {
+            #sidebar.collapsed {
+                width: 0;
+                overflow: hidden;
+            }
+        }
+        
+        /* Desktop sidebar toggle icon rotation when collapsed */
+        #desktop-sidebar-toggle.sidebar-collapsed i {
+            transform: scaleX(-1);
+        }
+
+        /* TOC Active Link */
+        .toc-link.active {
+            color: #cba6f7;
+            border-left-color: #cba6f7;
+            background-color: rgba(203, 166, 247, 0.05);
+        }
+
+        /* Markdown rendering */
+        .markdown-body {
+            background-color: transparent !important;
+            font-family: 'Inter', sans-serif !important;
+            color: #a6adc8 !important;
+            line-height: 1.6;
+            font-size: 16px;
+        }
+
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+            margin-top: 24px;
+            margin-bottom: 16px;
+            font-weight: 600;
+            line-height: 1.25;
+            padding-bottom: 0.3em;
+        }
+        
+        .markdown-body h1 { 
+            border-bottom: 1px solid #313244;
+        }
+        
+        .markdown-body h2 { 
+            border-bottom: 1px solid rgba(49, 50, 68, 0.5);
+        }
+
+        .markdown-body h1 { font-size: 2em; color: #b4befe !important; }
+        .markdown-body h2 { font-size: 1.5em; color: #cba6f7 !important; }
+        .markdown-body h3 { font-size: 1.25em; color: #89b4fa !important; }
+        .markdown-body h4 { font-size: 1em; font-weight: 600; color: #cdd6f4; }
+        .markdown-body h5 { font-size: 0.875em; font-weight: 600; color: #cdd6f4; }
+        .markdown-body h6 { font-size: 0.85em; color: #a6adc8; }
+        .markdown-body p { margin-bottom: 16px; }
+        .markdown-body a { color: #89b4fa; text-decoration: none; }
+        .markdown-body a:hover { text-decoration: underline; }
+
+        .markdown-body pre {
+            background-color: #181825 !important;
+            border-radius: 0.75rem;
+            padding: 1rem !important;
+            margin-bottom: 16px;
+            overflow: auto;
+        }
+
+        .markdown-body code {
+            font-family: 'JetBrains Mono', monospace;
+            color: #fab387 !important;
+            background-color: #313244 !important;
+            border-radius: 4px;
+            padding: 0.2em 0.4em;
+            font-size: 0.9375em;
+        }
+        .markdown-body pre code {
+            color: inherit !important;
+            background-color: transparent !important;
+            padding: 0;
+            font-size: 0.9375em;
+        }
+
+        .markdown-body ul, .markdown-body ol {
+            padding-left: 2em;
+            margin-bottom: 16px;
+        }
+        .markdown-body ul { list-style-type: disc; }
+        .markdown-body ol { list-style-type: decimal; }
+        .markdown-body li { margin-bottom: 0.25em; }
+
+        .markdown-body table {
+            display: table !important;
+            width: 100% !important;
+            border-collapse: separate;
+            border-spacing: 0;
+            border: 1px solid rgba(69, 71, 90, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+        .markdown-body table thead { background-color: rgba(203, 166, 247, 0.1); }
+        .markdown-body table tr { background-color: transparent !important; border: none !important; }
+        .markdown-body table tr:nth-child(2n) { background-color: rgba(49, 50, 68, 0.3) !important; }
+        .markdown-body table th {
+            color: #cba6f7 !important; font-weight: 600;
+            border: none !important; border-bottom: 1px solid rgba(69, 71, 90, 0.5) !important;
+            border-right: 1px solid rgba(49, 50, 68, 0.5); padding: 12px 16px !important; text-align: left;
+        }
+        .markdown-body table td {
+            border: none !important; border-bottom: 1px solid rgba(49, 50, 68, 0.3) !important;
+            border-right: 1px solid rgba(49, 50, 68, 0.3); color: #a6adc8 !important;
+            padding: 12px 16px !important; text-align: left;
+        }
+        .markdown-body table th:last-child, .markdown-body table td:last-child { border-right: none; }
+        .markdown-body table tr:last-child td { border-bottom: none !important; }
+
+        .markdown-body blockquote {
+            border-left: 0.25em solid rgba(69, 71, 90, 0.5);
+            padding: 0 1em;
+            color: #a6adc8;
+            margin-bottom: 16px;
+        }
+
+        .callout {
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+            background-color: rgba(49, 50, 68, 0.2);
+        }
+        .callout-icon { 
+            display: inline-flex;
+            align-items: center;
+            flex-shrink: 0;
+            line-height: 1;
+            padding-top: 0.3em;
+        }
+        .callout-icon svg {
+            width: 1em;
+            height: 1em;
+        }
+        .callout-content { flex: 1; }
+        .callout-content p { margin: 0 !important; }
+        .callout.tip { background-color: rgba(166, 227, 161, 0.1); }
+        .callout.tip .callout-icon { color: #a6e3a1; }
+        .callout.info { background-color: rgba(137, 180, 250, 0.1); }
+        .callout.info .callout-icon { color: #89b4fa; }
+        .callout.danger { background-color: rgba(243, 139, 168, 0.1); }
+        .callout.danger .callout-icon { color: #f38ba8; }
+        .callout.warning { background-color: rgba(250, 179, 135, 0.1); }
+        .callout.warning .callout-icon { color: #fab387; }
+        .callout.note { background-color: rgba(203, 166, 247, 0.1); }
+        .callout.note .callout-icon { color: #cba6f7; }
+
+        .mermaid {
+            background-color: #181825;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            display: flex;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        .copy-code-btn {
+            position: absolute; top: 0.5rem; right: 0.5rem;
+            padding: 0.5rem;
+            background-color: rgba(49, 50, 68, 0.95);
+            border-radius: 0.375rem;
+            color: #a6adc8;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.2s ease;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 10;
+        }
+        pre { position: relative; }
+        pre:hover .copy-code-btn { opacity: 1; }
+        .copy-code-btn:hover { background-color: rgba(69, 71, 90, 1); color: #cba6f7; }
+        .copy-code-btn.copied { color: #a6e3a1; }
+    </style>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+                    colors: {
+                        rosewater: '#f5e0dc', flamingo: '#f2cdcd', pink: '#f5c2e7', mauve: '#cba6f7',
+                        red: '#f38ba8', maroon: '#eba0ac', peach: '#fab387', yellow: '#f9e2af',
+                        green: '#a6e3a1', teal: '#94e2d5', sky: '#89dceb', sapphire: '#74c7ec',
+                        blue: '#89b4fa', lavender: '#b4befe', text: '#cdd6f4', subtext1: '#bac2de',
+                        subtext0: '#a6adc8', overlay2: '#9399b2', overlay1: '#7f849c', surface1: '#45475a',
+                        surface0: '#313244', base: '#1e1e2e', mantle: '#181825', crust: '#11111b',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-crust text-text font-sans antialiased h-screen flex overflow-hidden">
+
+    <!-- Mobile Header -->
+    <div class="md:hidden fixed top-0 w-full h-14 bg-crust z-50 flex items-center px-4 justify-between">
+        <button id="mobile-menu-btn" class="text-subtext0"><i data-lucide="menu"></i></button>
+        <span class="font-bold text-mauve">Kairō</span>
+    </div>
+    
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-60 bg-crust flex flex-col fixed md:relative h-full z-40 transform -translate-x-full md:translate-x-0 shrink-0 transition-all duration-200 md:overflow-visible overflow-hidden border-r border-surface1/50">
+        <div class="h-14 flex items-center justify-between px-4 shrink-0">
+            <span class="font-bold text-mauve hidden md:block">Kairō</span>
+            <div class="flex items-center gap-2">
+                <button id="add-btn" class="p-1 hover:text-green" title="Create new file or folder"><i data-lucide="plus"></i></button>
+                <button id="move-btn" class="p-1 hover:text-blue hidden" title="Move/rename"><i data-lucide="replace"></i></button>
+            </div>
+        </div>
+        <div id="file-tree" class="flex-1 overflow-y-auto p-2 custom-scrollbar"></div>
+    </aside>
+
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
+
+    <!-- Main -->
+    <main class="flex-1 flex flex-col h-full bg-crust pt-14 md:pt-0 min-w-0">
+        <!-- Toolbar -->
+        <div class="h-14 flex items-center justify-between px-6 bg-crust z-20 shrink-0">
+            <div class="flex items-center gap-3">
+                <button id="desktop-sidebar-toggle" class="hidden md:flex p-1.5 rounded hover:bg-surface0 text-subtext0 hover:text-mauve transition-colors" title="Toggle Sidebar">
+                    <i data-lucide="panel-left" class="w-4 h-4"></i>
+                </button>
+                <span id="current-filename" class="font-medium text-subtext1 truncate">Select a note...</span>
+                <span id="unsaved-indicator" class="hidden text-yellow"><i data-lucide="save" class="animate-pulse w-4 h-4"></i></span>
+            </div>
+            <div class="flex items-center gap-3">
+                <button id="preview-btn" class="bg-surface0 px-3 py-1 rounded text-sm hover:bg-surface1 flex items-center gap-2" title="Toggle preview">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                    <span>Preview</span>
+                </button>
+                <button id="delete-btn" class="text-red hover:bg-red/10 p-2 rounded" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-1 relative overflow-hidden flex">
+            <!-- Edit Mode -->
+            <div id="editor-container" class="absolute inset-0 z-10 bg-crust overflow-hidden">
+                <div id="editor" class="w-full h-full p-8 outline-none resize-none custom-scrollbar"></div>
+            </div>
+
+            <!-- Preview Mode -->
+            <div id="preview-container" class="absolute inset-0 z-0 overflow-y-auto custom-scrollbar p-6 md:p-12 pb-32 hidden">
+                 <article id="markdown-body" class="markdown-body max-w-4xl mx-auto"></article>
+            </div>
+        </div>
+    </main>
+
+    <!-- Create Modal -->
+    <div id="create-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center backdrop-blur">
+        <div class="bg-mantle border border-surface1 rounded-xl p-6 w-96">
+            <h3 class="font-bold text-lavender mb-4 flex items-center gap-2">
+                <i data-lucide="plus" class="w-5 h-5"></i>
+                Create New
+            </h3>
+            <input type="text" id="create-input" class="w-full bg-surface0 border border-surface1 rounded px-3 py-2 mb-4 focus:outline-none focus:border-mauve" placeholder="Name (end with / for folder)">
+            <div class="flex justify-end gap-2">
+                <button id="create-cancel" class="text-subtext0 px-3 py-1 hover:bg-surface0 rounded">Cancel</button>
+                <button id="create-confirm" class="bg-mauve text-base font-bold px-3 py-1 rounded">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Move Modal -->
+    <div id="move-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center backdrop-blur">
+        <div class="bg-mantle border border-surface1 rounded-xl p-6 w-96">
+            <h3 class="font-bold text-lavender mb-4 flex items-center gap-2">
+                <i data-lucide="replace" class="w-5 h-5"></i>
+                Move / Rename
+            </h3>
+            <div class="mb-4">
+                <label for="move-current" class="text-sm text-subtext0 mb-1 block">Current Path</label>
+                <input type="text" id="move-current" class="w-full bg-surface0 border border-surface1 rounded px-3 py-2 mb-3 focus:outline-none focus:border-mauve" readonly>
+            </div>
+            <div class="mb-4">
+                <label for="move-new" class="text-sm text-subtext0 mb-1 block">New Path</label>
+                <input type="text" id="move-new" class="w-full bg-surface0 border border-surface1 rounded px-3 py-2 focus:outline-none focus:border-mauve" placeholder="Enter new path or name">
+            </div>
+            <div class="flex justify-end gap-2">
+                <button id="move-cancel" class="text-subtext0 px-3 py-1 hover:bg-surface0 rounded">Cancel</button>
+                <button id="move-confirm" class="bg-mauve text-base font-bold px-3 py-1 rounded">Move</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div id="delete-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center backdrop-blur">
+        <div class="bg-mantle border border-surface1 rounded-xl p-6 w-96">
+            <h3 class="font-bold text-red mb-4 flex items-center gap-2">
+                <i data-lucide="trash-2" class="w-5 h-5"></i>
+                Delete File
+            </h3>
+            <p class="text-subtext0 mb-2">Are you sure you want to delete:</p>
+            <p id="delete-path" class="text-text font-mono text-sm bg-surface0 rounded px-3 py-2 mb-4 break-all"></p>
+            <div class="flex justify-end gap-2">
+                <button id="delete-cancel" class="text-subtext0 px-3 py-1 hover:bg-surface0 rounded">Cancel</button>
+                <button id="delete-confirm" class="bg-red text-base font-bold px-3 py-1 rounded">Delete</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+    <script>
+        // Initialize Lucide icons after page load
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => lucide.createIcons());
+        } else {
+            lucide.createIcons();
+        }
+    </script>
+</body>
+</html>
