@@ -1,4 +1,13 @@
-# Kairō
+<div align="center">
+  <img src=".github/assets/logo.svg" alt="Kairō Logo" width="200">
+  <h1>Kairō</h1>
+
+  <a href="https://github.com/tanq16/kairo/actions/workflows/release.yml"><img alt="Build Workflow" src="https://github.com/tanq16/kairo/actions/workflows/release.yml/badge.svg"></a>&nbsp;<a href="https://hub.docker.com/r/tanq16/kairo"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/tanq16/kairo"></a><br>
+  <a href="https://github.com/tanq16/kairo/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/tanq16/kairo"></a><br><br>
+  <a href="#features">Features</a> &bull; <a href="#screenshots">Screenshots</a> &bull; <a href="#installation-and-usage">Install & Use</a> &bull; <a href="#tips-and-notes">Tips & Notes</a>
+</div>
+
+---
 
 A simple note-taking application with Markdown support, built in Go.
 
