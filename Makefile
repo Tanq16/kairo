@@ -1,4 +1,4 @@
-.PHONY: help assets verify-assets clean build-local build build-all docker-build docker-push test lint version
+.PHONY: help assets verify-assets clean build-local build build-all docker-build docker-push version
 
 # =============================================================================
 # Variables
@@ -19,7 +19,7 @@ MERMAIDJS_VERSION := 11.4.1
 CODEJAR_VERSION := 4.2.0
 
 # Directories
-STATIC_DIR := internal/server/frontend/static
+STATIC_DIR := internal/server/static
 JS_DIR := $(STATIC_DIR)/js
 CSS_DIR := $(STATIC_DIR)/css
 FONTS_DIR := $(STATIC_DIR)/fonts
@@ -44,7 +44,7 @@ help: ## Show this help
 # =============================================================================
 assets: ## Download static assets
 	@echo "$(CYAN)Downloading assets...$(NC)"
-	@mkdir -p $(JS_DIR) $(CSS_DIR) $(FONTS_DIR)
+	@mkdir -p $(JS_DIR) $(CSS_DIR) $(FONTS_DIR) $(STATIC_DIR)/icons
 	@curl -sL "https://cdn.tailwindcss.com" -o "$(JS_DIR)/tailwindcss.js"
 	@curl -sL "https://unpkg.com/lucide@$(LUCIDE_VERSION)/dist/umd/lucide.min.js" -o "$(JS_DIR)/lucide.min.js"
 	@curl -sL "https://cdn.jsdelivr.net/npm/marked@$(MARKEDJS_VERSION)/marked.min.js" -o "$(JS_DIR)/marked.min.js"
@@ -66,6 +66,7 @@ assets: ## Download static assets
 	done
 	@sed -i.bak -E 's|https://fonts.gstatic.com/s/jetbrainsmono/[^/]+/||g' "$(CSS_DIR)/jetbrains-mono.css" && rm -f "$(CSS_DIR)/jetbrains-mono.css.bak"
 	@sed -i.bak 's|src: url(|src: url(/static/fonts/|g' "$(CSS_DIR)/jetbrains-mono.css" && rm -f "$(CSS_DIR)/jetbrains-mono.css.bak"
+	@cp .github/assets/logo.svg $(STATIC_DIR)/icons/favicon.svg
 	@echo "$(GREEN)Assets downloaded$(NC)"
 
 verify-assets: ## Verify required assets exist
@@ -74,7 +75,7 @@ verify-assets: ## Verify required assets exist
 
 clean: ## Remove built artifacts and downloaded assets
 	@rm -f $(APP_NAME) $(APP_NAME)-*
-	@rm -rf $(JS_DIR)/*.js $(CSS_DIR)/*.css $(FONTS_DIR)/*.woff2
+	@rm -rf $(JS_DIR)/*.min.js $(JS_DIR)/tailwindcss.js $(CSS_DIR)/*.css $(FONTS_DIR)/*.ttf $(STATIC_DIR)/icons/favicon.svg
 	@echo "$(GREEN)Cleaned$(NC)"
 
 # =============================================================================
@@ -98,7 +99,7 @@ build-all: assets verify-assets ## Build all platform binaries
 # Docker
 # =============================================================================
 docker-build: ## Build Docker image
-	@docker build -t $(DOCKER_USER)/$(APP_NAME):$(VERSION) .
+	@docker build --build-arg VERSION=$(VERSION) -t $(DOCKER_USER)/$(APP_NAME):$(VERSION) .
 	@docker tag $(DOCKER_USER)/$(APP_NAME):$(VERSION) $(DOCKER_USER)/$(APP_NAME):latest
 	@echo "$(GREEN)Docker image built$(NC)"
 
@@ -106,15 +107,6 @@ docker-push: docker-build ## Push Docker image to Docker Hub
 	@docker push $(DOCKER_USER)/$(APP_NAME):$(VERSION)
 	@docker push $(DOCKER_USER)/$(APP_NAME):latest
 	@echo "$(GREEN)Docker image pushed$(NC)"
-
-# =============================================================================
-# Test
-# =============================================================================
-test: ## Run tests
-	@go test -v ./...
-
-deadcode: ## Run dead code scanner
-	@$(HOME)/go/bin/deadcode ./...
 
 # =============================================================================
 # Version

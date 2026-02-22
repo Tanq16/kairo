@@ -14,8 +14,9 @@ RUN go mod download
 COPY . .
 
 # Download assets and build
+ARG VERSION=dev-build
 RUN make assets && \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o kairo .
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X 'github.com/tanq16/kairo/cmd.AppVersion=${VERSION}'" -o kairo .
 
 # Runtime stage
 FROM alpine:latest

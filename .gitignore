@@ -18,10 +18,11 @@ coverage.html
 data/
 
 # Downloaded assets (make assets) - not app.js which is source
-internal/server/frontend/static/js/*.min.js
-internal/server/frontend/static/js/tailwindcss.js
-internal/server/frontend/static/css/
-internal/server/frontend/static/fonts/
+internal/server/static/js/*.min.js
+internal/server/static/js/tailwindcss.js
+internal/server/static/css/
+internal/server/static/fonts/
+internal/server/static/icons/favicon.svg
 
 # IDE
 .idea/

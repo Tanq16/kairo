@@ -10,36 +10,38 @@ import (
 	"github.com/tanq16/kairo/internal/notes"
 )
 
-//go:embed frontend/static
+//go:embed static
 var staticFiles embed.FS
 
+type Config struct {
+	Port    int
+	Host    string
+	DataDir string
+}
+
 type Server struct {
-	port    int
-	host    string
-	dataDir string
+	config  Config
 	mux     *http.ServeMux
 	service *notes.Service
 }
 
-func New(port int, host, dataDir string) *Server {
+func New(cfg Config) *Server {
 	return &Server{
-		port:    port,
-		host:    host,
-		dataDir: dataDir,
-		mux:     http.NewServeMux(),
+		config: cfg,
+		mux:    http.NewServeMux(),
 	}
 }
 
 func (s *Server) Setup() error {
 	// Initialize storage and service
-	storage, err := notes.NewStorage(s.dataDir)
+	storage, err := notes.NewStorage(s.config.DataDir)
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	s.service = notes.NewService(storage)
 
 	// Serve embedded static files
-	staticFS, err := fs.Sub(staticFiles, "frontend/static")
+	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		return fmt.Errorf("failed to create static filesystem: %w", err)
 	}
@@ -61,13 +63,13 @@ func (s *Server) Setup() error {
 }
 
 func (s *Server) Run() error {
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	addr := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
 	log.Printf("INFO [server] Starting on http://%s", addr)
 	return http.ListenAndServe(addr, s.mux)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := staticFiles.ReadFile("frontend/static/index.html")
+	data, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return

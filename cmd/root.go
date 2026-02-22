@@ -25,14 +25,19 @@ var rootCmd = &cobra.Command{
 		HiddenDefaultCmd: true,
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		srv := server.New(rootFlags.port, rootFlags.host, rootFlags.dataDir)
-		if err := srv.Setup(); err != nil {
-			log.Fatalf("Failed to setup server: %v", err)
+		cfg := server.Config{
+			Port:    rootFlags.port,
+			Host:    rootFlags.host,
+			DataDir: rootFlags.dataDir,
 		}
-		log.Printf("Starting server on http://%s:%d", rootFlags.host, rootFlags.port)
-		log.Printf("Data directory: %s", rootFlags.dataDir)
+		srv := server.New(cfg)
+		if err := srv.Setup(); err != nil {
+			log.Fatalf("ERROR [cmd] Failed to setup server: %v", err)
+		}
+		log.Printf("INFO [cmd] Starting server on http://%s:%d", rootFlags.host, rootFlags.port)
+		log.Printf("INFO [cmd] Data directory: %s", rootFlags.dataDir)
 		if err := srv.Run(); err != nil {
-			log.Fatalf("Server error: %v", err)
+			log.Fatalf("ERROR [cmd] Server error: %v", err)
 		}
 	},
 }
