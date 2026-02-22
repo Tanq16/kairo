@@ -11,18 +11,18 @@ VERSION ?= dev-build
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 
+# Directories
+STATIC_DIR := internal/server/static
+JS_DIR := $(STATIC_DIR)/js
+CSS_DIR := $(STATIC_DIR)/css
+FONTS_DIR := $(STATIC_DIR)/fonts
+
 # Asset versions
 LUCIDE_VERSION := 0.468.0
 MARKEDJS_VERSION := 15.0.6
 HIGHLIGHTJS_VERSION := 11.11.1
 MERMAIDJS_VERSION := 11.4.1
 CODEMIRROR_BUNDLE := $(JS_DIR)/codemirror-bundle.min.js
-
-# Directories
-STATIC_DIR := internal/server/static
-JS_DIR := $(STATIC_DIR)/js
-CSS_DIR := $(STATIC_DIR)/css
-FONTS_DIR := $(STATIC_DIR)/fonts
 
 # Console colors
 CYAN := \033[0;36m
@@ -70,22 +70,27 @@ assets: ## Download static assets
 
 verify-assets: ## Verify required assets exist
 	@test -f $(JS_DIR)/tailwindcss.js || (echo "$(YELLOW)tailwindcss.js missing. Run 'make assets'$(NC)" && exit 1)
+	@test -f $(CODEMIRROR_BUNDLE) || (echo "$(YELLOW)codemirror-bundle.min.js missing. Run 'make codemirror'$(NC)" && exit 1)
 	@echo "$(GREEN)Assets verified$(NC)"
 
 codemirror: ## Rebuild CodeMirror 6 bundle (requires Node.js)
 	@echo "$(CYAN)Building CodeMirror bundle...$(NC)"
-	@npx esbuild cm-entry.js --bundle --format=iife --global-name=CM --minify --outfile=$(CODEMIRROR_BUNDLE)
+	@test -d node_modules/@codemirror || npm install --silent --no-audit --no-fund \
+		@codemirror/view @codemirror/state @codemirror/lang-markdown \
+		@codemirror/commands @codemirror/autocomplete @codemirror/language @lezer/highlight
+	@npx esbuild cm-entry.js --bundle --format=iife --global-name=CM --minify --outfile=$(CURDIR)/$(CODEMIRROR_BUNDLE)
 	@echo "$(GREEN)CodeMirror bundle built$(NC)"
 
 clean: ## Remove built artifacts and downloaded assets
 	@rm -f $(APP_NAME) $(APP_NAME)-*
 	@rm -rf $(JS_DIR)/*.min.js $(JS_DIR)/tailwindcss.js $(CSS_DIR)/*.css $(FONTS_DIR)/*.ttf $(STATIC_DIR)/icons/favicon.svg
+	@rm -rf node_modules package.json package-lock.json
 	@echo "$(GREEN)Cleaned$(NC)"
 
 # =============================================================================
 # Build
 # =============================================================================
-build-local: assets verify-assets ## Build binary for current platform
+build-local: verify-assets ## Build binary for current platform
 	@go build -ldflags="-s -w -X 'github.com/tanq16/kairo/cmd.AppVersion=$(VERSION)'" -o $(APP_NAME) .
 	@echo "$(GREEN)Built: ./$(APP_NAME)$(NC)"
 
@@ -93,7 +98,7 @@ build: verify-assets ## Build binary for specified GOOS/GOARCH
 	@CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w -X 'github.com/tanq16/kairo/cmd.AppVersion=$(VERSION)'" -o $(APP_NAME)-$(GOOS)-$(GOARCH) .
 	@echo "$(GREEN)Built: ./$(APP_NAME)-$(GOOS)-$(GOARCH)$(NC)"
 
-build-all: assets verify-assets ## Build all platform binaries
+build-all: verify-assets ## Build all platform binaries
 	@$(MAKE) build GOOS=linux GOARCH=amd64
 	@$(MAKE) build GOOS=linux GOARCH=arm64
 	@$(MAKE) build GOOS=darwin GOARCH=amd64

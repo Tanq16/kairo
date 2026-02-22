@@ -77,8 +77,8 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Download Assets
-        run: make assets
+      - name: Download Assets and Build CodeMirror
+        run: make assets && make codemirror
 
       - name: Build Binary
         run: make build GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} VERSION=${{ needs.create-release.outputs.version }}

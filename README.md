@@ -13,10 +13,10 @@ A simple note-taking application with Markdown support, built in Go.
 
 ## Features
 
-- **Markdown Editing**: Write and edit Markdown notes with syntax highlighting using CodeJar
-- **Live Preview**: Toggle between edit and preview modes with real-time rendering
-- **File Management**: Create, delete, move, and rename files and folders
-- **File Upload**: Upload files to attach to your notes
+- **Markdown Editing**: Write and edit Markdown notes with syntax highlighting using CodeMirror 6
+- **Live Preview**: Toggle between edit and preview modes with real-time rendering (preview by default)
+- **File Management**: Create, delete, move, and rename files and folders with automatic attachment handling
+- **Image Support**: Paste or drag-and-drop images directly into notes, with inline preview for image files
 - **Mermaid Diagrams**: Render Mermaid diagrams in your notes
 - **Callout Blocks**: Support for styled callouts (TIP, NOTE, INFO, WARNING, DANGER)
 - **Code Highlighting**: Syntax highlighting for code blocks with copy-to-clipboard functionality
@@ -44,12 +44,18 @@ Download from [releases](https://github.com/tanq16/kairo/releases) and run:
 ./kairo --port 8080
 ```
 
+### Docker
+
+```bash
+docker run -d -p 8080:8080 -v /path/to/notes:/data tanq16/kairo:latest
+```
+
 ### Build from Source
 
 ```bash
 git clone https://github.com/tanq16/kairo
 cd kairo
-go build -o kairo .
+make build-local
 ./kairo
 ```
 
@@ -66,6 +72,8 @@ Once the server is running, open your browser and navigate to the displayed URL 
 - The default data directory is `./data` - all your notes will be stored there
 - You can specify a custom data directory with the `--data` flag
 - The application supports nested folders - create folders by ending the name with `/` when creating new items
+- Paste or drag-and-drop images into the editor to attach them to your notes
+- Moving a note also moves its attachments and updates all image references automatically
 - Mermaid diagrams are rendered automatically when you use ` ```mermaid ` code blocks
 - Callout blocks use the format: `> [!TIP]` or `> [!NOTE]` etc.
 - Files are auto-saved as you type - look for the save indicator in the toolbar

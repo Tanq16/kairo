@@ -277,7 +277,7 @@ async function loadFile(path, isDir = false) {
     const thisLoad = ++loadVersion;
     currentPath = path;
     els.filenameDisplay.textContent = path || 'Select a note...';
-    window.history.replaceState(null, '', path ? `?path=${path}` : '/');
+    window.history.replaceState(null, '', path ? `?path=${encodeURIComponent(path)}` : '/');
 
     // Show/hide move button
     els.moveBtn.classList.toggle('hidden', !path);
@@ -300,7 +300,7 @@ async function loadFile(path, isDir = false) {
         let md = `# ${path.split('/').pop() || 'Root'}\n\n`;
         if (node && node.children) {
             node.children.forEach(c => {
-                md += `- [${c.name}](?path=${c.path})\n`;
+                md += `- [${c.name}](?path=${encodeURIComponent(c.path)})\n`;
             });
         }
         els.markdownBody.innerHTML = marked.parse(md);
@@ -326,7 +326,7 @@ async function loadFile(path, isDir = false) {
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.remove('hidden');
         previewMode = true;
-        els.markdownBody.innerHTML = `<img src="/data/${path}" alt="${path.split('/').pop()}" style="max-width:100%; border-radius:0.5rem;">`;
+        els.markdownBody.innerHTML = `<img src="/data/${encodeURI(path)}" alt="${path.split('/').pop()}" style="max-width:100%; border-radius:0.5rem;">`;
         els.previewBtn.innerHTML = '<i data-lucide="eye" class="w-4 h-4"></i><span>Preview</span>';
         lucide.createIcons();
         return;
@@ -578,7 +578,7 @@ async function uploadAndInsertImage(file) {
     try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData });
         const imgPath = await res.text();
-        const insertText = `\n![Attachment](${imgPath})\n`;
+        const insertText = `\n![Attachment](${encodeURI(imgPath)})\n`;
         view.dispatch({
             changes: { from: view.state.doc.length, insert: insertText }
         });
