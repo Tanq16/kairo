@@ -19,6 +19,7 @@ data/
 
 # Downloaded assets (make assets) - not app.js which is source
 internal/server/static/js/*.min.js
+!internal/server/static/js/codemirror-bundle.min.js
 internal/server/static/js/tailwindcss.js
 internal/server/static/css/
 internal/server/static/fonts/
@@ -34,6 +35,11 @@ internal/server/static/icons/favicon.svg
 # OS
 .DS_Store
 Thumbs.db
+
+# Node (CodeMirror bundle build only)
+node_modules/
+package.json
+package-lock.json
 
 # Debug
 debug

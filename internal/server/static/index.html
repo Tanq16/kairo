@@ -18,10 +18,7 @@
     <link rel="stylesheet" href="/static/css/github-dark.min.css">
     <script src="/static/js/mermaid.min.js"></script>
 
-    <script type="module">
-        import {CodeJar} from '/static/js/codejar.min.js';
-        window.CodeJar = CodeJar;
-    </script>
+    <script src="/static/js/codemirror-bundle.min.js"></script>
 
     <style>
         /* Catppuccin Mocha Theme */
@@ -42,19 +39,27 @@
         ::-webkit-scrollbar-thumb { background: #313244; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #45475a; }
 
-        /* Editor */
+        /* Editor — CodeMirror container */
         #editor {
-            font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-            line-height: 1.6;
-            tab-size: 4;
             background-color: #1e1e2e;
-            color: #cdd6f4;
-            font-size: 16px;
+            height: 100%;
         }
-
-        /* Markdown syntax highlighting in editor */
-        #editor .hljs {
-            background: transparent !important;
+        #editor .cm-editor {
+            height: 100%;
+            outline: none;
+        }
+        #editor .cm-scroller {
+            overflow: auto;
+            padding: 2rem;
+            font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        #editor .cm-content {
+            caret-color: #cdd6f4;
+        }
+        #editor .cm-gutters {
+            display: none;
         }
 
         /* Sidebar transitions */
@@ -269,7 +274,7 @@
     </div>
     
     <!-- Sidebar -->
-    <aside id="sidebar" class="w-60 bg-crust flex flex-col fixed md:relative h-full z-40 transform -translate-x-full md:translate-x-0 shrink-0 transition-all duration-200 md:overflow-visible overflow-hidden border-r border-surface1/50">
+    <aside id="sidebar" class="w-72 bg-crust flex flex-col fixed md:relative h-full z-40 transform -translate-x-full md:translate-x-0 shrink-0 transition-all duration-200 md:overflow-visible overflow-hidden border-r border-surface1/50">
         <div class="h-14 flex items-center justify-between px-4 shrink-0">
             <span class="font-bold text-mauve hidden md:block">Kairō</span>
             <div class="flex items-center gap-2">
@@ -306,7 +311,7 @@
         <div class="flex-1 relative overflow-hidden flex">
             <!-- Edit Mode -->
             <div id="editor-container" class="absolute inset-0 z-10 bg-crust overflow-hidden">
-                <div id="editor" class="w-full h-full p-8 outline-none resize-none custom-scrollbar"></div>
+                <div id="editor" class="w-full h-full"></div>
             </div>
 
             <!-- Preview Mode -->

@@ -35,11 +35,12 @@ const els = {
     }
 };
 
-let jar;
+let view;
 let currentPath = null;
 let unsaved = false;
 let previewMode = false;
 let sidebarCollapsed = false;
+let loadVersion = 0;
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -76,6 +77,10 @@ function initMarked() {
             const text = this.parser.parseInline(tokens);
             const slug = generateId(text.replace(/<[^>]*>/g, ''));
             return `<h${depth} id="${slug}">${text}</h${depth}>`;
+        },
+        image(token) {
+            const alt = token.text || '';
+            return `<img src="${token.href}" alt="${alt}" style="max-width:100%; border-radius:0.5rem;">`;
         },
         blockquote(token) {
             const body = this.parser.parse(token.tokens);
@@ -160,126 +165,91 @@ function addCopyButtons() {
     lucide.createIcons();
 }
 
-// --- Editor with Markdown Syntax Highlighting ---
+// --- Editor with CodeMirror 6 ---
 function initEditor() {
-    // Markdown syntax highlighting function with proper regex-based parsing
-    const highlight = (editor) => {
-        let code = editor.textContent;
-        
-        // Process line by line but handle inline markdown properly
-        const lines = code.split('\n');
-        const processedLines = lines.map(line => {
-            // Headers - full line
-            if (line.match(/^#{1,6}\s/)) {
-                const level = line.match(/^(#{1,6})/)[1].length;
-                const color = level === 1 ? 'lavender' : level === 2 ? 'mauve' : 'blue';
-                return `<span class="text-${color}">${escapeHtml(line)}</span>`;
-            }
-            // Code block markers
-            else if (line.match(/^```/)) {
-                return `<span class="text-peach">${escapeHtml(line)}</span>`;
-            }
-            // Lists - color only the bullet/number
-            else if (line.match(/^(\s*)([\*\-\+]|\d+\.)\s/)) {
-                const match = line.match(/^(\s*)([\*\-\+]|\d+\.)(\s.*)$/);
-                if (match) {
-                    return escapeHtml(match[1]) + `<span class="text-green">${escapeHtml(match[2])}</span>` + processInline(match[3]);
-                }
-                return `<span class="text-green">${escapeHtml(line)}</span>`;
-            }
-            // Regular line with inline markdown
-            else {
-                return processInline(line);
-            }
-        });
-        
-        editor.innerHTML = processedLines.join('\n');
-    };
-    
-    // Process inline markdown (bold, italic, inline code, links)
-    function processInline(text) {
-        let result = '';
-        let i = 0;
-        
-        while (i < text.length) {
-            // Inline code `text`
-            if (text[i] === '`') {
-                const endIdx = text.indexOf('`', i + 1);
-                if (endIdx !== -1) {
-                    result += `<span class="text-peach">${escapeHtml(text.substring(i, endIdx + 1))}</span>`;
-                    i = endIdx + 1;
-                    continue;
-                }
-            }
-            
-            // Bold **text** or __text__
-            if ((text[i] === '*' && text[i + 1] === '*') || (text[i] === '_' && text[i + 1] === '_')) {
-                const marker = text.substring(i, i + 2);
-                const endIdx = text.indexOf(marker, i + 2);
-                if (endIdx !== -1) {
-                    result += `<span class="text-yellow">${escapeHtml(text.substring(i, endIdx + 2))}</span>`;
-                    i = endIdx + 2;
-                    continue;
-                }
-            }
-            
-            // Italic *text* or _text_
-            if (text[i] === '*' || text[i] === '_') {
-                const marker = text[i];
-                const endIdx = text.indexOf(marker, i + 1);
-                if (endIdx !== -1 && text[i + 1] !== marker) {
-                    result += `<span class="text-yellow">${escapeHtml(text.substring(i, endIdx + 1))}</span>`;
-                    i = endIdx + 1;
-                    continue;
-                }
-            }
-            
-            // Strikethrough ~text~
-            if (text[i] === '~') {
-                const endIdx = text.indexOf('~', i + 1);
-                if (endIdx !== -1) {
-                    result += `<span class="text-overlay1">${escapeHtml(text.substring(i, endIdx + 1))}</span>`;
-                    i = endIdx + 1;
-                    continue;
-                }
-            }
-            
-            // Links [text](url)
-            if (text[i] === '[') {
-                const closeBracket = text.indexOf(']', i);
-                if (closeBracket !== -1 && text[closeBracket + 1] === '(') {
-                    const closeParen = text.indexOf(')', closeBracket + 2);
-                    if (closeParen !== -1) {
-                        result += `<span class="text-blue">${escapeHtml(text.substring(i, closeParen + 1))}</span>`;
-                        i = closeParen + 1;
-                        continue;
-                    }
-                }
-            }
-            
-            // Regular character
-            result += escapeHtml(text[i]);
-            i++;
-        }
-        
-        return result;
-    }
-    
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+    const {
+        EditorView, keymap, drawSelection, highlightActiveLine, highlightSpecialChars,
+        EditorState,
+        markdown, markdownLanguage, markdownKeymap,
+        defaultKeymap, indentWithTab, history, historyKeymap,
+        closeBrackets, closeBracketsKeymap,
+        syntaxHighlighting, HighlightStyle, bracketMatching, indentUnit,
+        tags
+    } = CM;
 
-    jar = CodeJar(els.editor, highlight, {
-        tab: '  ',
-        indentOn: /^\s*[\{\[]/
-    });
+    // Catppuccin Mocha theme
+    const catppuccinTheme = EditorView.theme({
+        '&': {
+            backgroundColor: '#1e1e2e',
+            color: '#cdd6f4',
+        },
+        '.cm-cursor, .cm-dropCursor': {
+            borderLeftColor: '#cdd6f4',
+        },
+        '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+            backgroundColor: '#45475a',
+        },
+        '.cm-activeLine': {
+            backgroundColor: 'rgba(49, 50, 68, 0.3)',
+        },
+        '.cm-matchingBracket': {
+            backgroundColor: 'rgba(137, 180, 250, 0.2)',
+            color: '#89b4fa',
+        },
+    }, { dark: true });
 
-    jar.onUpdate(code => {
-        unsaved = true;
-        els.unsavedIndicator.classList.remove('hidden');
-        debounceSave(code);
+    // Syntax highlighting colors
+    const catppuccinHighlight = HighlightStyle.define([
+        { tag: tags.heading1, color: '#b4befe', fontWeight: 'bold' },
+        { tag: tags.heading2, color: '#cba6f7', fontWeight: 'bold' },
+        { tag: tags.heading3, color: '#89b4fa', fontWeight: 'bold' },
+        { tag: [tags.heading4, tags.heading5, tags.heading6], color: '#cdd6f4', fontWeight: 'bold' },
+        { tag: tags.emphasis, color: '#f9e2af', fontStyle: 'italic' },
+        { tag: tags.strong, color: '#f9e2af', fontWeight: 'bold' },
+        { tag: tags.strikethrough, color: '#7f849c', textDecoration: 'line-through' },
+        { tag: tags.link, color: '#89b4fa', textDecoration: 'underline' },
+        { tag: tags.url, color: '#89b4fa' },
+        { tag: [tags.processingInstruction, tags.monospace], color: '#fab387' },
+        { tag: tags.quote, color: '#a6adc8', fontStyle: 'italic' },
+        { tag: tags.list, color: '#a6e3a1' },
+        { tag: tags.contentSeparator, color: '#45475a' },
+        { tag: tags.meta, color: '#7f849c' },
+        { tag: tags.labelName, color: '#89b4fa' },
+    ]);
+
+    const extensions = [
+        catppuccinTheme,
+        syntaxHighlighting(catppuccinHighlight),
+        markdown({ base: markdownLanguage }),
+        history(),
+        drawSelection(),
+        highlightActiveLine(),
+        highlightSpecialChars(),
+        bracketMatching(),
+        closeBrackets({ brackets: ['(', '[', '{', '"', '`'] }),
+        indentUnit.of('  '),
+        EditorState.tabSize.of(2),
+        keymap.of([
+            ...closeBracketsKeymap,
+            ...markdownKeymap,
+            ...historyKeymap,
+            indentWithTab,
+            ...defaultKeymap,
+        ]),
+        EditorView.lineWrapping,
+        EditorView.updateListener.of(update => {
+            if (update.docChanged) {
+                unsaved = true;
+                els.unsavedIndicator.classList.remove('hidden');
+                debounceSave(update.state.doc.toString());
+            }
+        }),
+    ];
+
+    view = new EditorView({
+        doc: '',
+        extensions,
+        parent: els.editor,
     });
 }
 
@@ -304,10 +274,11 @@ function debounceSave(content) {
 
 // --- File Operations ---
 async function loadFile(path, isDir = false) {
+    const thisLoad = ++loadVersion;
     currentPath = path;
     els.filenameDisplay.textContent = path || 'Select a note...';
     window.history.replaceState(null, '', path ? `?path=${path}` : '/');
-    
+
     // Show/hide move button
     els.moveBtn.classList.toggle('hidden', !path);
 
@@ -315,7 +286,7 @@ async function loadFile(path, isDir = false) {
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.remove('hidden');
         previewMode = true;
-        
+
         const findNode = (nodes) => {
             for (const n of nodes) {
                 if (n.path === path) return n;
@@ -324,7 +295,8 @@ async function loadFile(path, isDir = false) {
             return null;
         };
         const node = await findNode(await (await fetch('/api/tree')).json());
-        
+        if (thisLoad !== loadVersion) return;
+
         let md = `# ${path.split('/').pop() || 'Root'}\n\n`;
         if (node && node.children) {
             node.children.forEach(c => {
@@ -332,7 +304,7 @@ async function loadFile(path, isDir = false) {
             });
         }
         els.markdownBody.innerHTML = marked.parse(md);
-        
+
         els.markdownBody.querySelectorAll('a').forEach(a => {
             a.addEventListener('click', e => {
                 e.preventDefault();
@@ -349,14 +321,28 @@ async function loadFile(path, isDir = false) {
         return;
     }
 
+    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+    if (imageExts.some(ext => path.toLowerCase().endsWith(ext))) {
+        els.editorContainer.classList.add('hidden');
+        els.previewContainer.classList.remove('hidden');
+        previewMode = true;
+        els.markdownBody.innerHTML = `<img src="/data/${path}" alt="${path.split('/').pop()}" style="max-width:100%; border-radius:0.5rem;">`;
+        els.previewBtn.innerHTML = '<i data-lucide="eye" class="w-4 h-4"></i><span>Preview</span>';
+        lucide.createIcons();
+        return;
+    }
+
     try {
         const res = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+        if (thisLoad !== loadVersion) return;
         if (!res.ok) throw new Error('Failed to load');
         const content = await res.text();
-        
-        jar.updateCode(content);
+
+        view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: content }
+        });
         els.markdownBody.innerHTML = marked.parse(content);
-        
+
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {
             mermaid.initialize({ startOnLoad: false, theme: 'dark', fontFamily: 'Inter' });
@@ -364,9 +350,10 @@ async function loadFile(path, isDir = false) {
         }
         lucide.createIcons();
 
-        // Default to editor mode
-        togglePreview(false);
+        // Default to preview mode
+        togglePreview(true);
     } catch(e) {
+        if (thisLoad !== loadVersion) return;
         console.error(e);
         els.markdownBody.innerHTML = `<p style="color:#f38ba8">Error loading file</p>`;
     }
@@ -377,7 +364,7 @@ function togglePreview(force = null) {
     
     if (previewMode) {
         // Update preview from editor
-        const code = jar.toString();
+        const code = view.state.doc.toString();
         els.markdownBody.innerHTML = marked.parse(code);
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {
@@ -562,19 +549,43 @@ function initEventListeners() {
         const items = e.clipboardData.items;
         for (const item of items) {
             if (item.type.startsWith('image')) {
-                const formData = new FormData();
-                formData.append('file', item.getAsFile());
-                formData.append('notePath', currentPath);
-                try {
-                    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-                    const relPath = await res.text();
-                    jar.updateCode(jar.toString() + `\n![Attachment](${relPath})\n`);
-                } catch (e) {
-                    console.error('Upload failed:', e);
-                }
+                e.preventDefault();
+                await uploadAndInsertImage(item.getAsFile());
             }
         }
     });
+
+    // Image Drag & Drop
+    els.editorContainer.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+    els.editorContainer.addEventListener('drop', async (e) => {
+        if (!currentPath || previewMode) return;
+        const files = e.dataTransfer.files;
+        for (const file of files) {
+            if (file.type.startsWith('image/')) {
+                e.preventDefault();
+                await uploadAndInsertImage(file);
+            }
+        }
+    });
+}
+
+async function uploadAndInsertImage(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('notePath', currentPath);
+    try {
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const imgPath = await res.text();
+        const insertText = `\n![Attachment](${imgPath})\n`;
+        view.dispatch({
+            changes: { from: view.state.doc.length, insert: insertText }
+        });
+        await refreshTree();
+    } catch (e) {
+        console.error('Upload failed:', e);
+    }
 }
 
 // --- File Tree ---

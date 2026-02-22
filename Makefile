@@ -1,4 +1,4 @@
-.PHONY: help assets verify-assets clean build-local build build-all docker-build docker-push version
+.PHONY: help assets verify-assets codemirror clean build-local build build-all docker-build docker-push version
 
 # =============================================================================
 # Variables
@@ -16,7 +16,7 @@ LUCIDE_VERSION := 0.468.0
 MARKEDJS_VERSION := 15.0.6
 HIGHLIGHTJS_VERSION := 11.11.1
 MERMAIDJS_VERSION := 11.4.1
-CODEJAR_VERSION := 4.2.0
+CODEMIRROR_BUNDLE := $(JS_DIR)/codemirror-bundle.min.js
 
 # Directories
 STATIC_DIR := internal/server/static
@@ -50,7 +50,6 @@ assets: ## Download static assets
 	@curl -sL "https://cdn.jsdelivr.net/npm/marked@$(MARKEDJS_VERSION)/marked.min.js" -o "$(JS_DIR)/marked.min.js"
 	@curl -sL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/$(HIGHLIGHTJS_VERSION)/highlight.min.js" -o "$(JS_DIR)/highlight.min.js"
 	@curl -sL "https://cdn.jsdelivr.net/npm/mermaid@$(MERMAIDJS_VERSION)/dist/mermaid.min.js" -o "$(JS_DIR)/mermaid.min.js"
-	@curl -sL "https://cdn.jsdelivr.net/npm/codejar@$(CODEJAR_VERSION)/dist/codejar.min.js" -o "$(JS_DIR)/codejar.min.js"
 	@curl -sL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/$(HIGHLIGHTJS_VERSION)/styles/github-dark.min.css" -o "$(CSS_DIR)/github-dark.min.css"
 	@curl -sL "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" -H "User-Agent: Mozilla/5.0" -o "$(CSS_DIR)/inter.css"
 	@grep -o "https://fonts.gstatic.com/[^)']*" "$(CSS_DIR)/inter.css" | sort -u | while read url; do \
@@ -72,6 +71,11 @@ assets: ## Download static assets
 verify-assets: ## Verify required assets exist
 	@test -f $(JS_DIR)/tailwindcss.js || (echo "$(YELLOW)tailwindcss.js missing. Run 'make assets'$(NC)" && exit 1)
 	@echo "$(GREEN)Assets verified$(NC)"
+
+codemirror: ## Rebuild CodeMirror 6 bundle (requires Node.js)
+	@echo "$(CYAN)Building CodeMirror bundle...$(NC)"
+	@npx esbuild cm-entry.js --bundle --format=iife --global-name=CM --minify --outfile=$(CODEMIRROR_BUNDLE)
+	@echo "$(GREEN)CodeMirror bundle built$(NC)"
 
 clean: ## Remove built artifacts and downloaded assets
 	@rm -f $(APP_NAME) $(APP_NAME)-*

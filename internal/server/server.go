@@ -47,6 +47,9 @@ func (s *Server) Setup() error {
 	}
 	s.mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
+	// Serve data directory (for attachments/images)
+	s.mux.Handle("/data/", http.StripPrefix("/data/", http.FileServer(http.Dir(s.config.DataDir))))
+
 	// API routes
 	s.mux.HandleFunc("/api/tree", s.handleTree)
 	s.mux.HandleFunc("/api/file", s.handleFile)

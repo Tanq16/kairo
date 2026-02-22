@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -57,10 +59,107 @@ func (s *Service) Delete(path string) error {
 }
 
 func (s *Service) Move(oldPath, newPath string) error {
+	oldDir := filepath.ToSlash(filepath.Dir(oldPath))
+	newDir := filepath.ToSlash(filepath.Dir(newPath))
+
+	if strings.HasSuffix(strings.ToLower(oldPath), ".md") && oldDir != newDir {
+		if err := s.moveAttachments(oldPath, oldDir, newDir); err != nil {
+			return fmt.Errorf("failed to move attachments: %w", err)
+		}
+	}
+
 	if err := s.storage.Move(oldPath, newPath); err != nil {
 		return fmt.Errorf("failed to move: %w", err)
 	}
+
+	if strings.HasSuffix(strings.ToLower(oldPath), ".md") && oldDir != newDir {
+		s.cleanupEmptyAttachmentsDir(oldDir)
+	}
+
 	return nil
+}
+
+var mdImageRe = regexp.MustCompile(`(!\[[^\]]*\]\()([^)]+)(\))`)
+
+func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
+	content, err := s.storage.ReadFile(notePath)
+	if err != nil {
+		return err
+	}
+
+	var oldAttPrefix string
+	if oldDir == "." {
+		oldAttPrefix = "attachments/"
+	} else {
+		oldAttPrefix = oldDir + "/attachments/"
+	}
+
+	moved := make(map[string]string) // old data-relative path -> new data-relative path
+
+	updated := mdImageRe.ReplaceAllStringFunc(string(content), func(match string) string {
+		parts := mdImageRe.FindStringSubmatch(match)
+		src := parts[2]
+
+		if strings.HasPrefix(src, "http") {
+			return match
+		}
+
+		if !strings.HasPrefix(src, "/data/") {
+			return match
+		}
+
+		dataRelPath := strings.TrimPrefix(src, "/data/")
+
+		if !strings.HasPrefix(dataRelPath, oldAttPrefix) {
+			return match
+		}
+
+		filename := strings.TrimPrefix(dataRelPath, oldAttPrefix)
+		var newDataRelPath string
+		if newDir == "." {
+			newDataRelPath = "attachments/" + filename
+		} else {
+			newDataRelPath = newDir + "/attachments/" + filename
+		}
+
+		if _, alreadyMoved := moved[dataRelPath]; !alreadyMoved {
+			fullPath := filepath.Join(s.storage.DataDir(), filepath.FromSlash(dataRelPath))
+			if _, err := os.Stat(fullPath); err == nil {
+				if moveErr := s.storage.Move(dataRelPath, newDataRelPath); moveErr == nil {
+					moved[dataRelPath] = newDataRelPath
+				}
+			}
+		}
+
+		if newPath, ok := moved[dataRelPath]; ok {
+			return parts[1] + "/data/" + newPath + parts[3]
+		}
+
+		return match
+	})
+
+	if updated != string(content) {
+		return s.storage.SaveFile(notePath, []byte(updated))
+	}
+	return nil
+}
+
+func (s *Service) cleanupEmptyAttachmentsDir(dir string) {
+	var attDir string
+	if dir == "." {
+		attDir = "attachments"
+	} else {
+		attDir = dir + "/attachments"
+	}
+	fullPath := filepath.Join(s.storage.DataDir(), filepath.FromSlash(attDir))
+
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return
+	}
+	if len(entries) == 0 {
+		os.Remove(fullPath)
+	}
 }
 
 func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (string, error) {
@@ -82,6 +181,6 @@ func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 
-	relPath := fmt.Sprintf("%s/attachments/%s", parentDir, timestampedFilename)
-	return relPath, nil
+	relPath := filepath.ToSlash(filepath.Join(parentDir, "attachments", timestampedFilename))
+	return "/data/" + relPath, nil
 }
