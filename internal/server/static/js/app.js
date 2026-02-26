@@ -41,6 +41,54 @@ let unsaved = false;
 let previewMode = false;
 let sidebarCollapsed = false;
 let loadVersion = 0;
+let treeData = [];
+let expandedFolders = new Set(JSON.parse(localStorage.getItem('kairo-expanded-folders') || '[]'));
+
+function saveExpandedFolders() {
+    localStorage.setItem('kairo-expanded-folders', JSON.stringify([...expandedFolders]));
+}
+
+function updateBreadcrumbs(path) {
+    const container = els.filenameDisplay;
+    container.innerHTML = '';
+    if (!path) {
+        container.innerHTML = '<span class="text-subtext0">Select a note...</span>';
+        return;
+    }
+    const parts = path.split('/');
+    parts.forEach((part, i) => {
+        if (i > 0) {
+            const sep = document.createElement('span');
+            sep.className = 'text-overlay1 mx-1';
+            sep.textContent = '/';
+            container.appendChild(sep);
+        }
+        const crumb = document.createElement('span');
+        const isLast = i === parts.length - 1;
+        if (isLast) {
+            crumb.className = 'text-subtext1';
+            crumb.textContent = part;
+        } else {
+            crumb.className = 'text-subtext0 hover:text-mauve cursor-pointer';
+            crumb.textContent = part;
+            const folderPath = parts.slice(0, i + 1).join('/');
+            crumb.onclick = () => loadFile(folderPath, true);
+        }
+        container.appendChild(crumb);
+    });
+}
+
+function goHome() {
+    currentPath = null;
+    updateBreadcrumbs(null);
+    window.history.replaceState(null, '', '/');
+    els.moveBtn.classList.add('hidden');
+    els.editorContainer.classList.add('hidden');
+    els.previewContainer.classList.add('hidden');
+    expandedFolders.clear();
+    saveExpandedFolders();
+    refreshTree();
+}
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
@@ -51,7 +99,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     await refreshTree();
 
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('path')) loadFile(urlParams.get('path'));
+    const initPath = urlParams.get('path');
+    if (initPath) {
+        const node = findNodeInTree(treeData, initPath);
+        loadFile(initPath, node ? node.isDir : false);
+    }
 });
 
 // --- Markdown Rendering ---
@@ -276,7 +328,7 @@ function debounceSave(content) {
 async function loadFile(path, isDir = false) {
     const thisLoad = ++loadVersion;
     currentPath = path;
-    els.filenameDisplay.textContent = path || 'Select a note...';
+    updateBreadcrumbs(path);
     window.history.replaceState(null, '', path ? `?path=${encodeURIComponent(path)}` : '/');
 
     // Show/hide move button
@@ -300,7 +352,7 @@ async function loadFile(path, isDir = false) {
         let md = `# ${path.split('/').pop() || 'Root'}\n\n`;
         if (node && node.children) {
             node.children.forEach(c => {
-                md += `- [${c.name}](?path=${encodeURIComponent(c.path)})\n`;
+                md += `- [${c.name}](?path=${encodeURIComponent(c.path)}${c.isDir ? '&dir=1' : ''})\n`;
             });
         }
         els.markdownBody.innerHTML = marked.parse(md);
@@ -308,8 +360,10 @@ async function loadFile(path, isDir = false) {
         els.markdownBody.querySelectorAll('a').forEach(a => {
             a.addEventListener('click', e => {
                 e.preventDefault();
-                const p = new URL(a.href).searchParams.get('path');
-                if(p) loadFile(p);
+                const url = new URL(a.href);
+                const p = url.searchParams.get('path');
+                const dir = url.searchParams.get('dir') === '1';
+                if(p) loadFile(p, dir);
             });
         });
         return;
@@ -397,6 +451,10 @@ function initEventListeners() {
         els.sidebarOverlay.classList.add('hidden');
     });
     
+    // Kairo home buttons
+    document.getElementById('kairo-home')?.addEventListener('click', goHome);
+    document.getElementById('kairo-home-mobile')?.addEventListener('click', goHome);
+
     // Desktop sidebar toggle
     els.desktopSidebarToggle.addEventListener('click', () => {
         sidebarCollapsed = !sidebarCollapsed;
@@ -591,27 +649,35 @@ async function uploadAndInsertImage(file) {
 // --- File Tree ---
 async function refreshTree() {
     try {
-        const data = await (await fetch('/api/tree')).json();
+        treeData = await (await fetch('/api/tree')).json();
         els.fileTree.innerHTML = '';
-        renderTree(data, els.fileTree);
+        renderTree(treeData, els.fileTree);
         lucide.createIcons();
     } catch (e) {
         console.error('Failed to refresh tree:', e);
     }
 }
 
+function findNodeInTree(nodes, path) {
+    for (const n of nodes) {
+        if (n.path === path) return n;
+        if (n.children) { const f = findNodeInTree(n.children, path); if (f) return f; }
+    }
+    return null;
+}
+
 function renderTree(nodes, container) {
     nodes.sort((a,b) => (a.isDir === b.isDir) ? a.name.localeCompare(b.name) : (a.isDir ? -1 : 1));
-    
+
     nodes.forEach(node => {
         const div = document.createElement('div');
         div.className = 'pl-3';
-        
+
         const row = document.createElement('div');
         row.className = 'flex items-center gap-2 py-1 cursor-pointer text-subtext0 hover:text-mauve text-sm truncate group';
         const iconName = node.isDir ? 'folder' : 'file-text';
         row.innerHTML = `<i data-lucide="${iconName}" class="w-4 h-4"></i> <span>${node.name}</span>`;
-        
+
         row.onclick = (e) => {
             e.stopPropagation();
             if (node.isDir) {
@@ -622,16 +688,32 @@ function renderTree(nodes, container) {
                     div.appendChild(childDiv);
                     renderTree(node.children || [], childDiv);
                     lucide.createIcons();
+                    expandedFolders.add(node.path);
                 } else {
-                    childDiv.classList.toggle('hidden');
+                    const isHidden = childDiv.classList.toggle('hidden');
+                    if (isHidden) {
+                        expandedFolders.delete(node.path);
+                    } else {
+                        expandedFolders.add(node.path);
+                    }
                 }
+                saveExpandedFolders();
                 loadFile(node.path, true);
             } else {
                 loadFile(node.path);
             }
         };
-        
+
         div.appendChild(row);
+
+        // Auto-expand if previously expanded
+        if (node.isDir && expandedFolders.has(node.path)) {
+            const childDiv = document.createElement('div');
+            childDiv.className = 'children border-l border-surface1 ml-2';
+            div.appendChild(childDiv);
+            renderTree(node.children || [], childDiv);
+        }
+
         container.appendChild(div);
     });
 }

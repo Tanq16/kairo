@@ -186,6 +186,12 @@
             margin-bottom: 16px;
         }
 
+        .markdown-body hr {
+            border: none;
+            border-top: 1px solid #313244;
+            margin: 1.5em 0;
+        }
+
         .callout {
             padding: 1rem;
             border-radius: 0.5rem;
@@ -270,13 +276,13 @@
     <!-- Mobile Header -->
     <div class="md:hidden fixed top-0 w-full h-14 bg-crust z-50 flex items-center px-4 justify-between">
         <button id="mobile-menu-btn" class="text-subtext0"><i data-lucide="menu"></i></button>
-        <span class="font-bold text-mauve">Kairō</span>
+        <span class="font-bold text-mauve cursor-pointer" id="kairo-home-mobile">Kairō</span>
     </div>
     
     <!-- Sidebar -->
-    <aside id="sidebar" class="w-72 bg-crust flex flex-col fixed md:relative h-full z-40 transform -translate-x-full md:translate-x-0 shrink-0 transition-all duration-200 md:overflow-visible overflow-hidden border-r border-surface1/50">
+    <aside id="sidebar" class="w-[21rem] bg-crust flex flex-col fixed md:relative h-full z-40 transform -translate-x-full md:translate-x-0 shrink-0 transition-all duration-200 md:overflow-visible overflow-hidden border-r border-surface1/50">
         <div class="h-14 flex items-center justify-between px-4 shrink-0">
-            <span class="font-bold text-mauve hidden md:block">Kairō</span>
+            <span class="font-bold text-mauve hidden md:block cursor-pointer" id="kairo-home">Kairō</span>
             <div class="flex items-center gap-2">
                 <button id="add-btn" class="p-1 hover:text-green" title="Create new file or folder"><i data-lucide="plus"></i></button>
                 <button id="move-btn" class="p-1 hover:text-blue hidden" title="Move/rename"><i data-lucide="replace"></i></button>
@@ -295,7 +301,7 @@
                 <button id="desktop-sidebar-toggle" class="hidden md:flex p-1.5 rounded hover:bg-surface0 text-subtext0 hover:text-mauve transition-colors" title="Toggle Sidebar">
                     <i data-lucide="panel-left" class="w-4 h-4"></i>
                 </button>
-                <span id="current-filename" class="font-medium text-subtext1 truncate">Select a note...</span>
+                <div id="current-filename" class="flex items-center font-medium text-subtext1 overflow-hidden whitespace-nowrap min-w-0"><span class="text-subtext0">Select a note...</span></div>
                 <span id="unsaved-indicator" class="hidden text-yellow"><i data-lucide="save" class="animate-pulse w-4 h-4"></i></span>
             </div>
             <div class="flex items-center gap-3">
