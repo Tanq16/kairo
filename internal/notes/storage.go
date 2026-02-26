@@ -9,28 +9,28 @@ import (
 	"time"
 )
 
-type Storage struct {
+type FileStorage struct {
 	dataDir string
 }
 
-func (s *Storage) DataDir() string {
+func (s *FileStorage) DataDir() string {
 	return s.dataDir
 }
 
-func NewStorage(dataDir string) (*Storage, error) {
+func NewStorage(dataDir string) (*FileStorage, error) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create data directory: %w", err)
+		return nil, err
 	}
 
 	trashDir := filepath.Join(dataDir, ".trash")
 	if err := os.MkdirAll(trashDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create trash directory: %w", err)
+		return nil, err
 	}
 
-	return &Storage{dataDir: dataDir}, nil
+	return &FileStorage{dataDir: dataDir}, nil
 }
 
-func (s *Storage) safePath(reqPath string) (string, error) {
+func (s *FileStorage) safePath(reqPath string) (string, error) {
 	clean := filepath.Clean(reqPath)
 	if strings.Contains(clean, "..") || strings.HasPrefix(clean, "/") || strings.HasPrefix(clean, "\\") {
 		return "", fmt.Errorf("invalid path")
@@ -38,7 +38,7 @@ func (s *Storage) safePath(reqPath string) (string, error) {
 	return filepath.Join(s.dataDir, clean), nil
 }
 
-func (s *Storage) GetTree() (*FileNode, error) {
+func (s *FileStorage) GetTree() (*FileNode, error) {
 	root := &FileNode{Name: "root", Path: "", IsDir: true, Children: []*FileNode{}}
 
 	err := filepath.WalkDir(s.dataDir, func(path string, d fs.DirEntry, err error) error {
@@ -92,7 +92,7 @@ func (s *Storage) GetTree() (*FileNode, error) {
 	return root, nil
 }
 
-func (s *Storage) ReadFile(path string) ([]byte, error) {
+func (s *FileStorage) ReadFile(path string) ([]byte, error) {
 	fullPath, err := s.safePath(path)
 	if err != nil {
 		return nil, err
@@ -100,18 +100,18 @@ func (s *Storage) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(fullPath)
 }
 
-func (s *Storage) SaveFile(path string, content []byte) error {
+func (s *FileStorage) SaveFile(path string, content []byte) error {
 	fullPath, err := s.safePath(path)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-		return fmt.Errorf("could not create directory: %w", err)
+		return err
 	}
 	return os.WriteFile(fullPath, content, 0644)
 }
 
-func (s *Storage) CreateDir(path string) error {
+func (s *FileStorage) CreateDir(path string) error {
 	fullPath, err := s.safePath(path)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func (s *Storage) CreateDir(path string) error {
 	return os.MkdirAll(fullPath, 0755)
 }
 
-func (s *Storage) Delete(path string) error {
+func (s *FileStorage) Delete(path string) error {
 	fullPath, err := s.safePath(path)
 	if err != nil {
 		return err
@@ -131,17 +131,17 @@ func (s *Storage) Delete(path string) error {
 	return os.Rename(fullPath, trashPath)
 }
 
-func (s *Storage) Move(oldPath, newPath string) error {
+func (s *FileStorage) Move(oldPath, newPath string) error {
 	oldFullPath, err := s.safePath(oldPath)
 	if err != nil {
-		return fmt.Errorf("invalid old path: %w", err)
+		return err
 	}
 	newFullPath, err := s.safePath(newPath)
 	if err != nil {
-		return fmt.Errorf("invalid new path: %w", err)
+		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(newFullPath), 0755); err != nil {
-		return fmt.Errorf("failed to create destination dir: %w", err)
+		return err
 	}
 	return os.Rename(oldFullPath, newFullPath)
 }

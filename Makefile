@@ -1,4 +1,4 @@
-.PHONY: help assets verify-assets codemirror clean build-local build build-all docker-build docker-push version
+.PHONY: help assets verify-assets codemirror clean build build-for build-all docker-build docker-push version
 
 # =============================================================================
 # Variables
@@ -18,10 +18,10 @@ CSS_DIR := $(STATIC_DIR)/css
 FONTS_DIR := $(STATIC_DIR)/fonts
 
 # Asset versions
-LUCIDE_VERSION := 0.468.0
-MARKEDJS_VERSION := 15.0.6
+LUCIDE_VERSION := 0.575.0
+MARKEDJS_VERSION := 17.0.3
 HIGHLIGHTJS_VERSION := 11.11.1
-MERMAIDJS_VERSION := 11.4.1
+MERMAIDJS_VERSION := 11.12.3
 CODEMIRROR_BUNDLE := $(JS_DIR)/codemirror-bundle.min.js
 
 # Console colors
@@ -90,19 +90,19 @@ clean: ## Remove built artifacts and downloaded assets
 # =============================================================================
 # Build
 # =============================================================================
-build-local: verify-assets ## Build binary for current platform
+build: verify-assets ## Build binary for current platform
 	@go build -ldflags="-s -w -X 'github.com/tanq16/kairo/cmd.AppVersion=$(VERSION)'" -o $(APP_NAME) .
 	@echo "$(GREEN)Built: ./$(APP_NAME)$(NC)"
 
-build: verify-assets ## Build binary for specified GOOS/GOARCH
+build-for: verify-assets ## Build binary for specified GOOS/GOARCH
 	@CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w -X 'github.com/tanq16/kairo/cmd.AppVersion=$(VERSION)'" -o $(APP_NAME)-$(GOOS)-$(GOARCH) .
 	@echo "$(GREEN)Built: ./$(APP_NAME)-$(GOOS)-$(GOARCH)$(NC)"
 
 build-all: verify-assets ## Build all platform binaries
-	@$(MAKE) build GOOS=linux GOARCH=amd64
-	@$(MAKE) build GOOS=linux GOARCH=arm64
-	@$(MAKE) build GOOS=darwin GOARCH=amd64
-	@$(MAKE) build GOOS=darwin GOARCH=arm64
+	@$(MAKE) build-for GOOS=linux GOARCH=amd64
+	@$(MAKE) build-for GOOS=linux GOARCH=arm64
+	@$(MAKE) build-for GOOS=darwin GOARCH=amd64
+	@$(MAKE) build-for GOOS=darwin GOARCH=arm64
 
 # =============================================================================
 # Docker

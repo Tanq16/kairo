@@ -68,6 +68,7 @@ func (s *Server) Setup() error {
 func (s *Server) Run() error {
 	addr := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
 	log.Printf("INFO [server] Starting on http://%s", addr)
+	log.Printf("INFO [server] Data directory: %s", s.config.DataDir)
 	return http.ListenAndServe(addr, s.mux)
 }
 

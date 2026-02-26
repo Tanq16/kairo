@@ -81,7 +81,7 @@ jobs:
         run: make assets && make codemirror
 
       - name: Build Binary
-        run: make build GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} VERSION=${{ needs.create-release.outputs.version }}
+        run: make build-for GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} VERSION=${{ needs.create-release.outputs.version }}
 
       - name: Upload Release Asset
         run: |

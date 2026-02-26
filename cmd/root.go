@@ -34,8 +34,6 @@ var rootCmd = &cobra.Command{
 		if err := srv.Setup(); err != nil {
 			log.Fatalf("ERROR [cmd] Failed to setup server: %v", err)
 		}
-		log.Printf("INFO [cmd] Starting server on http://%s:%d", rootFlags.host, rootFlags.port)
-		log.Printf("INFO [cmd] Data directory: %s", rootFlags.dataDir)
 		if err := srv.Run(); err != nil {
 			log.Fatalf("ERROR [cmd] Server error: %v", err)
 		}

@@ -36,6 +36,12 @@ A simple note-taking application with Markdown support, built in Go.
 
 ## Installation and Usage
 
+### Docker
+
+```bash
+docker run -d -p 8080:8080 -v /path/to/notes:/data tanq16/kairo:latest
+```
+
 ### Binary
 
 Download from [releases](https://github.com/tanq16/kairo/releases) and run:
@@ -44,18 +50,12 @@ Download from [releases](https://github.com/tanq16/kairo/releases) and run:
 ./kairo --port 8080
 ```
 
-### Docker
-
-```bash
-docker run -d -p 8080:8080 -v /path/to/notes:/data tanq16/kairo:latest
-```
-
 ### Build from Source
 
 ```bash
 git clone https://github.com/tanq16/kairo
 cd kairo
-make build-local
+make build
 ./kairo
 ```
 

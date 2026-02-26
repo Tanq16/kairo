@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"os"
 
 	"github.com/tanq16/kairo/internal/notes"
 )
@@ -22,7 +24,7 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	pathParam := r.URL.Query().Get("path")
 	content, err := s.service.GetFile(pathParam)
 	if err != nil {
-		if err.Error() == "file not found" {
+		if errors.Is(err, os.ErrNotExist) {
 			http.Error(w, "File not found", http.StatusNotFound)
 			return
 		}
