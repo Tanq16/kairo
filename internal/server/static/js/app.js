@@ -42,6 +42,99 @@ let previewMode = false;
 let sidebarCollapsed = false;
 let loadVersion = 0;
 let treeData = [];
+
+const mermaidConfig = {
+    startOnLoad: false,
+    theme: 'base',
+    fontFamily: 'Inter',
+    themeVariables: {
+        darkMode: true,
+        background: '#1e1e2e',
+        mainBkg: '#1e1e2e',
+        primaryColor: '#313244',
+        primaryTextColor: '#cdd6f4',
+        primaryBorderColor: '#89b4fa',
+        secondaryColor: '#45475a',
+        secondaryTextColor: '#cdd6f4',
+        secondaryBorderColor: '#7f849c',
+        tertiaryColor: '#313244',
+        tertiaryTextColor: '#cdd6f4',
+        tertiaryBorderColor: '#585b70',
+        lineColor: '#89b4fa',
+        arrowheadColor: '#89b4fa',
+        textColor: '#cdd6f4',
+        titleColor: '#cba6f7',
+        noteBkgColor: '#45475a',
+        noteTextColor: '#f9e2af',
+        noteBorderColor: '#585b70',
+        // Flowchart
+        nodeBkg: '#313244',
+        nodeBorder: '#89b4fa',
+        clusterBkg: '#181825',
+        clusterBorder: '#585b70',
+        defaultLinkColor: '#89b4fa',
+        edgeLabelBackground: '#313244',
+        nodeTextColor: '#cdd6f4',
+        // Sequence
+        actorBkg: '#313244',
+        actorBorder: '#89b4fa',
+        actorTextColor: '#cdd6f4',
+        actorLineColor: '#585b70',
+        signalColor: '#f5c2e7',
+        signalTextColor: '#cdd6f4',
+        labelBoxBkgColor: '#45475a',
+        labelBoxBorderColor: '#585b70',
+        labelTextColor: '#cdd6f4',
+        loopTextColor: '#f9e2af',
+        activationBorderColor: '#cba6f7',
+        activationBkgColor: '#45475a',
+        sequenceNumberColor: '#1e1e2e',
+        // Gantt
+        sectionBkgColor: '#181825',
+        altSectionBkgColor: '#1e1e2e',
+        sectionBkgColor2: '#11111b',
+        taskBkgColor: '#89b4fa',
+        taskBorderColor: '#b4befe',
+        taskTextColor: '#1e1e2e',
+        taskTextLightColor: '#1e1e2e',
+        taskTextDarkColor: '#cdd6f4',
+        taskTextOutsideColor: '#cdd6f4',
+        taskTextClickableColor: '#89dceb',
+        activeTaskBkgColor: '#cba6f7',
+        activeTaskBorderColor: '#f5c2e7',
+        doneTaskBkgColor: '#45475a',
+        doneTaskBorderColor: '#585b70',
+        critBkgColor: '#f38ba8',
+        critBorderColor: '#eba0ac',
+        gridColor: '#313244',
+        todayLineColor: '#f38ba8',
+        // Pie
+        pie1: '#cba6f7', pie2: '#89b4fa', pie3: '#a6e3a1', pie4: '#f9e2af',
+        pie5: '#f38ba8', pie6: '#94e2d5', pie7: '#fab387', pie8: '#89dceb',
+        pie9: '#f5c2e7', pie10: '#74c7ec', pie11: '#eba0ac', pie12: '#b4befe',
+        pieTitleTextColor: '#cdd6f4',
+        pieSectionTextColor: '#1e1e2e',
+        pieLegendTextColor: '#cdd6f4',
+        pieStrokeColor: '#1e1e2e',
+        pieOuterStrokeColor: '#313244',
+        // Git
+        git0: '#89b4fa', git1: '#cba6f7', git2: '#a6e3a1', git3: '#f9e2af',
+        git4: '#f38ba8', git5: '#94e2d5', git6: '#fab387', git7: '#74c7ec',
+        gitInv0: '#1e1e2e', gitInv1: '#1e1e2e', gitInv2: '#1e1e2e', gitInv3: '#1e1e2e',
+        gitInv4: '#1e1e2e', gitInv5: '#1e1e2e', gitInv6: '#1e1e2e', gitInv7: '#1e1e2e',
+        commitLabelColor: '#bac2de',
+        commitLabelBackground: '#1e1e2e',
+        tagLabelColor: '#1e1e2e',
+        tagLabelBackground: '#f9e2af',
+        tagLabelBorder: '#fab387',
+        // State
+        labelBackgroundColor: '#313244',
+        // Color scale (mindmaps, timelines, etc.)
+        cScale0: '#313244', cScale1: '#89b4fa', cScale2: '#cba6f7', cScale3: '#a6e3a1',
+        cScale4: '#f9e2af', cScale5: '#f38ba8', cScale6: '#94e2d5', cScale7: '#fab387',
+        cScale8: '#89dceb', cScale9: '#f5c2e7', cScale10: '#74c7ec', cScale11: '#b4befe',
+    }
+};
 let expandedFolders = new Set(JSON.parse(localStorage.getItem('kairo-expanded-folders') || '[]'));
 
 function saveExpandedFolders() {
@@ -399,7 +492,7 @@ async function loadFile(path, isDir = false) {
 
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {
-            mermaid.initialize({ startOnLoad: false, theme: 'dark', fontFamily: 'Inter' });
+            mermaid.initialize(mermaidConfig);
             mermaid.run({ nodes: els.markdownBody.querySelectorAll('.mermaid') });
         }
         lucide.createIcons();

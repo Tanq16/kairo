@@ -230,9 +230,50 @@
             background-color: #181825;
             padding: 1rem;
             border-radius: 0.5rem;
-            display: flex;
-            justify-content: center;
             margin: 1.5rem 0;
+            text-align: center;
+            overflow-x: auto;
+        }
+
+        /* Gantt chart fixes */
+        .mermaid .grid .tick line {
+            stroke: #313244 !important;
+            stroke-width: 0.5px !important;
+            opacity: 0.5 !important;
+        }
+        .mermaid .grid .tick text {
+            fill: #a6adc8 !important;
+        }
+        .mermaid .grid path {
+            stroke: #313244 !important;
+            stroke-width: 0.5px !important;
+        }
+        .mermaid .section {
+            stroke: none !important;
+        }
+        .mermaid .section0, .mermaid .section2 {
+            fill: #181825 !important;
+        }
+        .mermaid .section1, .mermaid .section3 {
+            fill: #1e1e2e !important;
+        }
+        .mermaid .today {
+            stroke: #f38ba8 !important;
+            stroke-width: 2px !important;
+        }
+        .mermaid .taskText {
+            fill: #1e1e2e !important;
+            font-size: 0.75em !important;
+        }
+        .mermaid .taskTextOutsideRight,
+        .mermaid .taskTextOutsideLeft {
+            fill: #cdd6f4 !important;
+        }
+        .mermaid .sectionTitle {
+            fill: #cba6f7 !important;
+        }
+        .mermaid .titleText {
+            fill: #cba6f7 !important;
         }
 
         .copy-code-btn {
@@ -282,7 +323,7 @@
     </div>
     
     <!-- Sidebar -->
-    <aside id="sidebar" class="w-[21rem] bg-crust flex flex-col fixed md:relative h-full z-40 transform -translate-x-full md:translate-x-0 shrink-0 transition-all duration-200 md:overflow-visible overflow-hidden border-r border-surface1/50">
+    <aside id="sidebar" class="w-[21rem] bg-crust flex flex-col fixed md:relative h-full z-40 transform -translate-x-full md:translate-x-0 shrink-0 transition-all duration-200 md:overflow-visible overflow-hidden border-r border-surface0">
         <div class="h-14 flex items-center justify-between px-4 shrink-0">
             <span class="font-bold text-mauve hidden md:block cursor-pointer" id="kairo-home">Kairō</span>
             <div class="flex items-center gap-2">
@@ -311,7 +352,7 @@
                     <i data-lucide="eye" class="w-4 h-4"></i>
                     <span>Preview</span>
                 </button>
-                <button id="delete-btn" class="text-red hover:bg-red/10 p-2 rounded" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                <button id="delete-btn" class="text-red hover:bg-surface0 p-2 rounded" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
             </div>
         </div>
 
