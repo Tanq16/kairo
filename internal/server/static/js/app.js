@@ -8,11 +8,13 @@ const els = {
     filenameDisplay: document.getElementById('current-filename'),
     unsavedIndicator: document.getElementById('unsaved-indicator'),
     previewBtn: document.getElementById('preview-btn'),
+    printBtn: document.getElementById('print-btn'),
     sidebar: document.getElementById('sidebar'),
     sidebarOverlay: document.getElementById('sidebar-overlay'),
     mobileMenuBtn: document.getElementById('mobile-menu-btn'),
     desktopSidebarToggle: document.getElementById('desktop-sidebar-toggle'),
-    addBtn: document.getElementById('add-btn'),
+    addFileBtn: document.getElementById('add-file-btn'),
+    addFolderBtn: document.getElementById('add-folder-btn'),
     moveBtn: document.getElementById('move-btn'),
     createModal: {
         backdrop: document.getElementById('create-modal'),
@@ -42,6 +44,20 @@ let previewMode = false;
 let sidebarCollapsed = false;
 let loadVersion = 0;
 let treeData = [];
+let createMode = 'file';
+
+function encPath(path) {
+    if (!path) return '';
+    // Use URL-safe Base64 without padding to match Go's decoder
+    return btoa(unescape(encodeURIComponent(path))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decPath(encoded) {
+    if (!encoded) return '';
+    let str = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    while (str.length % 4) str += '=';
+    return decodeURIComponent(escape(atob(str)));
+}
 
 const mermaidConfig = {
     startOnLoad: false,
@@ -176,6 +192,7 @@ function goHome() {
     updateBreadcrumbs(null);
     window.history.replaceState(null, '', '/');
     els.moveBtn.classList.add('hidden');
+    if(els.printBtn) els.printBtn.classList.add('hidden');
     els.editorContainer.classList.add('hidden');
     els.previewContainer.classList.add('hidden');
     expandedFolders.clear();
@@ -192,11 +209,46 @@ document.addEventListener('DOMContentLoaded', async () => {
     await refreshTree();
 
     const urlParams = new URLSearchParams(window.location.search);
-    const initPath = urlParams.get('path');
-    if (initPath) {
+    const encInitPath = urlParams.get('path');
+    if (encInitPath) {
+        const initPath = decPath(encInitPath);
         const node = findNodeInTree(treeData, initPath);
         loadFile(initPath, node ? node.isDir : false);
     }
+
+    // Add drag and drop to the root file tree
+    els.fileTree.ondragover = (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        els.fileTree.classList.add('bg-crust/50');
+    };
+    els.fileTree.ondragleave = (e) => {
+        els.fileTree.classList.remove('bg-crust/50');
+    };
+    els.fileTree.ondrop = async (e) => {
+        e.preventDefault();
+        els.fileTree.classList.remove('bg-crust/50');
+        const draggedPath = e.dataTransfer.getData('text/plain');
+        if (!draggedPath) return;
+
+        const itemName = draggedPath.split('/').pop();
+        const newPath = itemName; // root
+
+        if (newPath === draggedPath) return; // already in root
+
+        try {
+            await fetch('/api/move', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: encPath(draggedPath), newPath: encPath(newPath) })
+            });
+            await refreshTree();
+            if (currentPath === draggedPath) loadFile(newPath);
+        } catch (err) {
+            console.error('Move failed:', err);
+            alert('Failed to move: ' + err.message);
+        }
+    };
 });
 
 // --- Markdown Rendering ---
@@ -407,7 +459,7 @@ function debounceSave(content) {
             await fetch('/api/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: currentPath, content: content })
+                body: JSON.stringify({ path: encPath(currentPath), content: content })
             });
             unsaved = false;
             els.unsavedIndicator.classList.add('hidden');
@@ -417,15 +469,30 @@ function debounceSave(content) {
     }, 1000);
 }
 
+function fixImagePaths() {
+    els.markdownBody.querySelectorAll('img').forEach(img => {
+        const src = img.getAttribute('src');
+        if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+            // It's a relative path in the markdown (like attachments/img.png)
+            // But we need to fetch it from the server using the proper API
+            // The path must be resolved relative to the current note's path
+            const currentDir = currentPath ? currentPath.substring(0, currentPath.lastIndexOf('/')) : '';
+            const fullPath = currentDir ? (currentDir + '/' + src) : src;
+            img.src = `/api/file?path=${encPath(fullPath)}`;
+        }
+    });
+}
+
 // --- File Operations ---
 async function loadFile(path, isDir = false) {
     const thisLoad = ++loadVersion;
     currentPath = path;
     updateBreadcrumbs(path);
-    window.history.replaceState(null, '', path ? `?path=${encodeURIComponent(path)}` : '/');
+    window.history.replaceState(null, '', path ? `?path=${encPath(path)}` : '/');
 
-    // Show/hide move button
+    // Show/hide buttons
     els.moveBtn.classList.toggle('hidden', !path);
+    if(els.printBtn) els.printBtn.classList.toggle('hidden', !path || isDir);
 
     if (isDir) {
         els.editorContainer.classList.add('hidden');
@@ -445,10 +512,11 @@ async function loadFile(path, isDir = false) {
         let md = `# ${path.split('/').pop() || 'Root'}\n\n`;
         if (node && node.children) {
             node.children.forEach(c => {
-                md += `- [${c.name}](?path=${encodeURIComponent(c.path)}${c.isDir ? '&dir=1' : ''})\n`;
+                md += `- [${c.name}](?path=${encPath(c.path)}${c.isDir ? '&dir=1' : ''})\n`;
             });
         }
         els.markdownBody.innerHTML = marked.parse(md);
+        fixImagePaths();
 
         els.markdownBody.querySelectorAll('a').forEach(a => {
             a.addEventListener('click', e => {
@@ -473,14 +541,14 @@ async function loadFile(path, isDir = false) {
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.remove('hidden');
         previewMode = true;
-        els.markdownBody.innerHTML = `<img src="/data/${encodeURI(path)}" alt="${path.split('/').pop()}" style="max-width:100%; border-radius:0.5rem;">`;
+        els.markdownBody.innerHTML = `<img src="/api/file?path=${encPath(path)}" alt="${path.split('/').pop()}" style="max-width:100%; border-radius:0.5rem;">`;
         els.previewBtn.innerHTML = '<i data-lucide="eye" class="w-4 h-4"></i><span>Preview</span>';
         lucide.createIcons();
         return;
     }
 
     try {
-        const res = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+        const res = await fetch(`/api/file?path=${encPath(path)}`);
         if (thisLoad !== loadVersion) return;
         if (!res.ok) throw new Error('Failed to load');
         const content = await res.text();
@@ -489,6 +557,7 @@ async function loadFile(path, isDir = false) {
             changes: { from: 0, to: view.state.doc.length, insert: content }
         });
         els.markdownBody.innerHTML = marked.parse(content);
+        fixImagePaths();
 
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {
@@ -513,6 +582,7 @@ function togglePreview(force = null) {
         // Update preview from editor
         const code = view.state.doc.toString();
         els.markdownBody.innerHTML = marked.parse(code);
+        fixImagePaths();
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {
             mermaid.run({ nodes: els.markdownBody.querySelectorAll('.mermaid') });
@@ -533,6 +603,12 @@ function togglePreview(force = null) {
 // --- Event Listeners ---
 function initEventListeners() {
     els.previewBtn.addEventListener('click', () => togglePreview());
+    if (els.printBtn) {
+        els.printBtn.addEventListener('click', () => {
+            if (!previewMode) togglePreview(true);
+            setTimeout(() => window.print(), 100);
+        });
+    }
     
     // Sidebar toggles
     els.mobileMenuBtn.addEventListener('click', () => {
@@ -561,41 +637,54 @@ function initEventListeners() {
     });
 
     // Create Modal
-    els.addBtn.addEventListener('click', () => {
-        els.createModal.backdrop.classList.remove('hidden');
-        els.createModal.input.value = '';
-        els.createModal.input.focus();
-    });
+    if(els.addFileBtn) {
+        els.addFileBtn.addEventListener('click', () => {
+            createMode = 'file';
+            document.getElementById('create-modal-title').innerHTML = '<i data-lucide="file-plus" class="w-5 h-5"></i> Create New File';
+            lucide.createIcons();
+            els.createModal.backdrop.classList.remove('hidden');
+            els.createModal.input.value = '';
+            els.createModal.input.focus();
+        });
+    }
+    if(els.addFolderBtn) {
+        els.addFolderBtn.addEventListener('click', () => {
+            createMode = 'folder';
+            document.getElementById('create-modal-title').innerHTML = '<i data-lucide="folder-plus" class="w-5 h-5"></i> Create New Folder';
+            lucide.createIcons();
+            els.createModal.backdrop.classList.remove('hidden');
+            els.createModal.input.value = '';
+            els.createModal.input.focus();
+        });
+    }
     els.createModal.cancel.addEventListener('click', () => {
         els.createModal.backdrop.classList.add('hidden');
     });
     
     async function handleCreateConfirm() {
-        const val = els.createModal.input.value.trim();
+        let val = els.createModal.input.value.trim();
         if (!val) return;
         
-        let path = currentPath ? (currentPath.endsWith('.md') ? currentPath.split('/').slice(0,-1).join('/') : currentPath) : '';
-        if (path) path += '/';
-        path += val;
+        let path = val;
 
         try {
-            if (val.endsWith('/')) {
+            if (createMode === 'folder') {
                 await fetch('/api/create-dir', { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: path.slice(0, -1) }) 
+                    body: JSON.stringify({ path: encPath(path) })
                 });
             } else {
                 if(!path.endsWith('.md')) path += '.md';
                 await fetch('/api/save', { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path, content: '# ' + val.replace('.md', '') }) 
+                    body: JSON.stringify({ path: encPath(path), content: '# ' + val.replace('.md', '') })
                 });
             }
             els.createModal.backdrop.classList.add('hidden');
             await refreshTree();
-            if (!val.endsWith('/')) loadFile(path);
+            if (createMode === 'file') loadFile(path);
         } catch (e) {
             console.error('Create failed:', e);
             alert('Failed to create: ' + e.message);
@@ -636,7 +725,7 @@ function initEventListeners() {
             await fetch('/api/move', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: currentPath, newPath: newPath }) 
+                body: JSON.stringify({ path: encPath(currentPath), newPath: encPath(newPath) })
             });
             els.moveModal.backdrop.classList.add('hidden');
             await refreshTree();
@@ -673,7 +762,7 @@ function initEventListeners() {
             await fetch('/api/delete', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: currentPath }) 
+                body: JSON.stringify({ path: encPath(currentPath) })
             });
             els.deleteModal.backdrop.classList.add('hidden');
             await refreshTree();
@@ -725,7 +814,7 @@ function initEventListeners() {
 async function uploadAndInsertImage(file) {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('notePath', currentPath);
+    formData.append('notePath', encPath(currentPath));
     try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData });
         const imgPath = await res.text();
@@ -771,6 +860,62 @@ function renderTree(nodes, container) {
         const iconName = node.isDir ? 'folder' : 'file-text';
         row.innerHTML = `<i data-lucide="${iconName}" class="w-4 h-4"></i> <span>${node.name}</span>`;
 
+        // Implement drag and drop logic
+        row.draggable = true;
+        row.ondragstart = (e) => {
+            e.stopPropagation();
+            e.dataTransfer.setData('text/plain', node.path);
+            e.dataTransfer.effectAllowed = 'move';
+            row.classList.add('opacity-50');
+        };
+        row.ondragend = (e) => {
+            row.classList.remove('opacity-50');
+        };
+
+        if (node.isDir) {
+            row.ondragover = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'move';
+                row.classList.add('bg-surface0');
+            };
+            row.ondragleave = (e) => {
+                e.stopPropagation();
+                row.classList.remove('bg-surface0');
+            };
+            row.ondrop = async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                row.classList.remove('bg-surface0');
+                const draggedPath = e.dataTransfer.getData('text/plain');
+                if (!draggedPath || draggedPath === node.path) return;
+
+                // Prevent moving a folder into itself or its children
+                if (node.path.startsWith(draggedPath + '/')) {
+                    alert('Cannot move a folder into itself.');
+                    return;
+                }
+
+                const itemName = draggedPath.split('/').pop();
+                let newPath = node.path ? node.path + '/' + itemName : itemName;
+
+                if (newPath === draggedPath) return; // already in this folder
+
+                try {
+                    await fetch('/api/move', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: encPath(draggedPath), newPath: encPath(newPath) })
+                    });
+                    await refreshTree();
+                    if (currentPath === draggedPath) loadFile(newPath);
+                } catch (err) {
+                    console.error('Move failed:', err);
+                    alert('Failed to move: ' + err.message);
+                }
+            };
+        }
+
         row.onclick = (e) => {
             e.stopPropagation();
             if (node.isDir) {
@@ -791,7 +936,6 @@ function renderTree(nodes, container) {
                     }
                 }
                 saveExpandedFolders();
-                loadFile(node.path, true);
             } else {
                 loadFile(node.path);
             }

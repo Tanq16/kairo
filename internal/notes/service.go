@@ -59,6 +59,7 @@ func (s *Service) Move(oldPath, newPath string) error {
 }
 
 var mdImageRe = regexp.MustCompile(`(!\[[^\]]*\]\()([^)]+)(\))`)
+var htmlImageRe = regexp.MustCompile(`(<img[^>]+src=["'])([^"']+)(["'][^>]*>)`)
 
 func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 	content, err := s.storage.ReadFile(notePath)
@@ -75,30 +76,42 @@ func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 
 	moved := make(map[string]string) // old data-relative path -> new data-relative path
 
-	updated := mdImageRe.ReplaceAllStringFunc(string(content), func(match string) string {
-		parts := mdImageRe.FindStringSubmatch(match)
-		src := parts[2]
-
-		if strings.HasPrefix(src, "http") {
+	processMatch := func(match, pre, src, post string) string {
+		if strings.HasPrefix(src, "http") || strings.HasPrefix(src, "data:") {
 			return match
 		}
 
-		if !strings.HasPrefix(src, "/data/") {
-			return match
-		}
+		// It should be a relative path like `attachments/foo.png`
+		// It might be URL encoded, so we could decode, but for file matching we assume standard paths
+		// Let's decode it for file system matching just in case
+		// Actually, in the text we want to KEEP it exactly as is, we just move the file underneath.
+		// Wait, if we keep it as `attachments/foo.png`, we don't need to change the markdown text at all!
+		// But we still need to move the file.
 
-		dataRelPath := strings.TrimPrefix(src, "/data/")
+		// Determine data relative path.
+		// If src is `attachments/foo.png` and oldDir is `folder`, dataRelPath is `folder/attachments/foo.png`.
+		// But if it's already an absolute-looking path like `/data/...`, we handle it. (Legacy support)
+		var dataRelPath string
+		if strings.HasPrefix(src, "/data/") {
+			dataRelPath = strings.TrimPrefix(src, "/data/")
+		} else {
+			if oldDir == "." {
+				dataRelPath = src
+			} else {
+				dataRelPath = oldDir + "/" + src
+			}
+		}
 
 		if !strings.HasPrefix(dataRelPath, oldAttPrefix) {
 			return match
 		}
 
-		filename := strings.TrimPrefix(dataRelPath, oldAttPrefix)
+		fileName := strings.TrimPrefix(dataRelPath, oldAttPrefix)
 		var newDataRelPath string
 		if newDir == "." {
-			newDataRelPath = "attachments/" + filename
+			newDataRelPath = "attachments/" + fileName
 		} else {
-			newDataRelPath = newDir + "/attachments/" + filename
+			newDataRelPath = newDir + "/attachments/" + fileName
 		}
 
 		if _, alreadyMoved := moved[dataRelPath]; !alreadyMoved {
@@ -110,11 +123,26 @@ func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 			}
 		}
 
-		if newPath, ok := moved[dataRelPath]; ok {
-			return parts[1] + "/data/" + newPath + parts[3]
+		// If it's a legacy absolute path, rewrite it to relative
+		if strings.HasPrefix(src, "/data/") {
+			if _, ok := moved[dataRelPath]; ok {
+				return pre + "attachments/" + fileName + post
+			}
 		}
 
+		// If it's already relative, we don't need to rewrite the src in the markdown!
+		// `attachments/foo.png` remains `attachments/foo.png` in the new folder.
 		return match
+	}
+
+	updated := mdImageRe.ReplaceAllStringFunc(string(content), func(match string) string {
+		parts := mdImageRe.FindStringSubmatch(match)
+		return processMatch(match, parts[1], parts[2], parts[3])
+	})
+
+	updated = htmlImageRe.ReplaceAllStringFunc(updated, func(match string) string {
+		parts := htmlImageRe.FindStringSubmatch(match)
+		return processMatch(match, parts[1], parts[2], parts[3])
 	})
 
 	if updated != string(content) {
@@ -160,6 +188,7 @@ func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (
 		return "", err
 	}
 
-	relPath := filepath.ToSlash(filepath.Join(parentDir, "attachments", timestampedFilename))
-	return "/data/" + relPath, nil
+	// We return a path relative to the note's directory
+	relPath := filepath.ToSlash(filepath.Join("attachments", timestampedFilename))
+	return relPath, nil
 }
