@@ -74,23 +74,13 @@ func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 		oldAttPrefix = oldDir + "/attachments/"
 	}
 
-	moved := make(map[string]string) // old data-relative path -> new data-relative path
+	moved := make(map[string]string)
 
 	processMatch := func(match, pre, src, post string) string {
 		if strings.HasPrefix(src, "http") || strings.HasPrefix(src, "data:") {
 			return match
 		}
 
-		// It should be a relative path like `attachments/foo.png`
-		// It might be URL encoded, so we could decode, but for file matching we assume standard paths
-		// Let's decode it for file system matching just in case
-		// Actually, in the text we want to KEEP it exactly as is, we just move the file underneath.
-		// Wait, if we keep it as `attachments/foo.png`, we don't need to change the markdown text at all!
-		// But we still need to move the file.
-
-		// Determine data relative path.
-		// If src is `attachments/foo.png` and oldDir is `folder`, dataRelPath is `folder/attachments/foo.png`.
-		// But if it's already an absolute-looking path like `/data/...`, we handle it. (Legacy support)
 		var dataRelPath string
 		if strings.HasPrefix(src, "/data/") {
 			dataRelPath = strings.TrimPrefix(src, "/data/")
@@ -123,15 +113,12 @@ func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 			}
 		}
 
-		// If it's a legacy absolute path, rewrite it to relative
 		if strings.HasPrefix(src, "/data/") {
 			if _, ok := moved[dataRelPath]; ok {
 				return pre + "attachments/" + fileName + post
 			}
 		}
 
-		// If it's already relative, we don't need to rewrite the src in the markdown!
-		// `attachments/foo.png` remains `attachments/foo.png` in the new folder.
 		return match
 	}
 
@@ -188,7 +175,6 @@ func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (
 		return "", err
 	}
 
-	// We return a path relative to the note's directory
 	relPath := filepath.ToSlash(filepath.Join("attachments", timestampedFilename))
 	return relPath, nil
 }

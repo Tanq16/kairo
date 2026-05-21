@@ -890,7 +890,6 @@ function renderTree(nodes, container) {
                 const draggedPath = e.dataTransfer.getData('text/plain');
                 if (!draggedPath || draggedPath === node.path) return;
 
-                // Prevent moving a folder into itself or its children
                 if (node.path.startsWith(draggedPath + '/')) {
                     alert('Cannot move a folder into itself.');
                     return;
@@ -899,7 +898,7 @@ function renderTree(nodes, container) {
                 const itemName = draggedPath.split('/').pop();
                 let newPath = node.path ? node.path + '/' + itemName : itemName;
 
-                if (newPath === draggedPath) return; // already in this folder
+                if (newPath === draggedPath) return;
 
                 try {
                     await fetch('/api/move', {

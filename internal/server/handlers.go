@@ -185,18 +185,5 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// We return the Base64-encoded relative path now? Actually, let's keep relPath as is.
-	// We might need to encode it to base64 if the frontend expects it, or frontend can encode it.
-	// Since we are changing all API paths to Base64, frontend will encode/decode paths.
-	// But `relPath` returned from here is inserted into markdown `![Attachment](relPath)`.
-	// Markdown paths should NOT be base64. They should be relative text.
-	// The problem statement says: "I want to implement GitHub like storage where all notes are valid markdown files, and any embedded images or linked images are referenced via relative paths inside markdown and base64. Also need frontend and backend synchronization to support paths properly."
-	// Wait, the prompt says: "I want to implement GitHub like storage where all notes are valid markdown files, and any embedded images or linked images are referenced via relative paths inside markdown and base64."
-	// Let's think: The path inside markdown should just be a normal relative path (`attachments/image.png`).
-	// When requested, the frontend fetches the image using base64.
-	// Wait, "referenced via relative paths inside markdown and base64. Also need frontend and backend synchronization to support paths properly."
-	// Ah, I see: it should be referenced via relative paths *inside markdown*, but the frontend might request it via base64 encoding from the server.
-
-	// Yes, `relPath` should be a relative path. We will encode it in frontend when fetching.
 	w.Write([]byte(relPath))
 }
