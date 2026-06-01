@@ -54,13 +54,28 @@
             padding: 2rem;
             font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
             font-size: 16px;
-            line-height: 1.6;
+            line-height: 1;
         }
         #editor .cm-content {
             caret-color: #cdd6f4;
         }
         #editor .cm-gutters {
             display: none;
+        }
+
+        /* Print media styles */
+        @media print {
+            body { background: white !important; color: black !important; }
+            #sidebar, .h-14.bg-crust.z-20, #create-modal, #move-modal, #delete-modal, .copy-code-btn { display: none !important; }
+            main { padding: 0 !important; margin: 0 !important; height: auto !important; overflow: visible !important; }
+            #preview-container { display: block !important; position: static !important; overflow: visible !important; padding: 0 !important; }
+            #editor-container { display: none !important; }
+            .markdown-body { color: black !important; background: transparent !important; }
+            .markdown-body code { color: #d90000 !important; background-color: #f1f1f1 !important; }
+            .markdown-body pre { background-color: #f1f1f1 !important; border: 1px solid #ccc !important; }
+            .markdown-body a { color: #0000EE !important; text-decoration: underline !important; }
+            .callout { background-color: #f1f1f1 !important; border-left: 4px solid #333 !important; }
+            * { transition: none !important; }
         }
 
         /* Sidebar transitions */
@@ -144,6 +159,7 @@
             background-color: transparent !important;
             padding: 0;
             font-size: 0.9375em;
+            line-height: 1;
         }
 
         .markdown-body ul, .markdown-body ol {
@@ -327,11 +343,12 @@
         <div class="h-14 flex items-center justify-between px-4 shrink-0">
             <span class="font-bold text-mauve hidden md:block cursor-pointer" id="kairo-home">Kairō</span>
             <div class="flex items-center gap-2">
-                <button id="add-btn" class="p-1 hover:text-green" title="Create new file or folder"><i data-lucide="plus"></i></button>
+                <button id="add-file-btn" class="p-1 hover:text-green" title="Create new file"><i data-lucide="file-plus"></i></button>
+                <button id="add-folder-btn" class="p-1 hover:text-yellow" title="Create new folder"><i data-lucide="folder-plus"></i></button>
                 <button id="move-btn" class="p-1 hover:text-blue hidden" title="Move/rename"><i data-lucide="replace"></i></button>
             </div>
         </div>
-        <div id="file-tree" class="flex-1 overflow-y-auto p-2 custom-scrollbar"></div>
+        <div id="file-tree" class="flex-1 overflow-y-auto p-2 custom-scrollbar drop-zone"></div>
     </aside>
 
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
@@ -348,6 +365,9 @@
                 <span id="unsaved-indicator" class="hidden text-yellow"><i data-lucide="save" class="animate-pulse w-4 h-4"></i></span>
             </div>
             <div class="flex items-center gap-3">
+                <button id="print-btn" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors hidden" title="Print Document">
+                    <i data-lucide="printer" class="w-4 h-4"></i>
+                </button>
                 <button id="preview-btn" class="bg-surface0 px-3 py-1 rounded text-sm hover:bg-surface1 flex items-center gap-2" title="Toggle preview">
                     <i data-lucide="eye" class="w-4 h-4"></i>
                     <span>Preview</span>
@@ -373,11 +393,11 @@
     <!-- Create Modal -->
     <div id="create-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center backdrop-blur">
         <div class="bg-mantle border border-surface1 rounded-xl p-6 w-96">
-            <h3 class="font-bold text-lavender mb-4 flex items-center gap-2">
+            <h3 class="font-bold text-lavender mb-4 flex items-center gap-2" id="create-modal-title">
                 <i data-lucide="plus" class="w-5 h-5"></i>
                 Create New
             </h3>
-            <input type="text" id="create-input" class="w-full bg-surface0 border border-surface1 rounded px-3 py-2 mb-4 focus:outline-none focus:border-mauve" placeholder="Name (end with / for folder)">
+            <input type="text" id="create-input" class="w-full bg-surface0 border border-surface1 rounded px-3 py-2 mb-4 focus:outline-none focus:border-mauve" placeholder="Name">
             <div class="flex justify-end gap-2">
                 <button id="create-cancel" class="text-subtext0 px-3 py-1 hover:bg-surface0 rounded">Cancel</button>
                 <button id="create-confirm" class="bg-mauve text-base font-bold px-3 py-1 rounded">Create</button>

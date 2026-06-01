@@ -59,6 +59,7 @@ func (s *Service) Move(oldPath, newPath string) error {
 }
 
 var mdImageRe = regexp.MustCompile(`(!\[[^\]]*\]\()([^)]+)(\))`)
+var htmlImageRe = regexp.MustCompile(`(<img[^>]+src=["'])([^"']+)(["'][^>]*>)`)
 
 func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 	content, err := s.storage.ReadFile(notePath)
@@ -73,32 +74,34 @@ func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 		oldAttPrefix = oldDir + "/attachments/"
 	}
 
-	moved := make(map[string]string) // old data-relative path -> new data-relative path
+	moved := make(map[string]string)
 
-	updated := mdImageRe.ReplaceAllStringFunc(string(content), func(match string) string {
-		parts := mdImageRe.FindStringSubmatch(match)
-		src := parts[2]
-
-		if strings.HasPrefix(src, "http") {
+	processMatch := func(match, pre, src, post string) string {
+		if strings.HasPrefix(src, "http") || strings.HasPrefix(src, "data:") {
 			return match
 		}
 
-		if !strings.HasPrefix(src, "/data/") {
-			return match
+		var dataRelPath string
+		if strings.HasPrefix(src, "/data/") {
+			dataRelPath = strings.TrimPrefix(src, "/data/")
+		} else {
+			if oldDir == "." {
+				dataRelPath = src
+			} else {
+				dataRelPath = oldDir + "/" + src
+			}
 		}
-
-		dataRelPath := strings.TrimPrefix(src, "/data/")
 
 		if !strings.HasPrefix(dataRelPath, oldAttPrefix) {
 			return match
 		}
 
-		filename := strings.TrimPrefix(dataRelPath, oldAttPrefix)
+		fileName := strings.TrimPrefix(dataRelPath, oldAttPrefix)
 		var newDataRelPath string
 		if newDir == "." {
-			newDataRelPath = "attachments/" + filename
+			newDataRelPath = "attachments/" + fileName
 		} else {
-			newDataRelPath = newDir + "/attachments/" + filename
+			newDataRelPath = newDir + "/attachments/" + fileName
 		}
 
 		if _, alreadyMoved := moved[dataRelPath]; !alreadyMoved {
@@ -110,11 +113,23 @@ func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 			}
 		}
 
-		if newPath, ok := moved[dataRelPath]; ok {
-			return parts[1] + "/data/" + newPath + parts[3]
+		if strings.HasPrefix(src, "/data/") {
+			if _, ok := moved[dataRelPath]; ok {
+				return pre + "attachments/" + fileName + post
+			}
 		}
 
 		return match
+	}
+
+	updated := mdImageRe.ReplaceAllStringFunc(string(content), func(match string) string {
+		parts := mdImageRe.FindStringSubmatch(match)
+		return processMatch(match, parts[1], parts[2], parts[3])
+	})
+
+	updated = htmlImageRe.ReplaceAllStringFunc(updated, func(match string) string {
+		parts := htmlImageRe.FindStringSubmatch(match)
+		return processMatch(match, parts[1], parts[2], parts[3])
 	})
 
 	if updated != string(content) {
@@ -160,6 +175,6 @@ func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (
 		return "", err
 	}
 
-	relPath := filepath.ToSlash(filepath.Join(parentDir, "attachments", timestampedFilename))
-	return "/data/" + relPath, nil
+	relPath := filepath.ToSlash(filepath.Join("attachments", timestampedFilename))
+	return relPath, nil
 }
