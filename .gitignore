@@ -41,6 +41,8 @@ node_modules/
 package.json
 package-lock.json
 
+.claude
+
 # Debug
 debug
 *.log
