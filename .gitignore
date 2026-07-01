@@ -16,6 +16,7 @@ coverage.html
 
 # Data directories (user data)
 data/
+AI-Docs/
 
 # Downloaded assets (make assets) - not app.js which is source
 internal/server/static/js/*.min.js
