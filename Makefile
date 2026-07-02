@@ -1,4 +1,4 @@
-.PHONY: help assets verify-assets codemirror clean build build-for build-all docker-build docker-push version
+.PHONY: help assets verify-assets codemirror clean build build-for build-all test docker-build docker-push version
 
 # =============================================================================
 # Variables
@@ -18,10 +18,10 @@ CSS_DIR := $(STATIC_DIR)/css
 FONTS_DIR := $(STATIC_DIR)/fonts
 
 # Asset versions
-LUCIDE_VERSION := 0.575.0
-MARKEDJS_VERSION := 17.0.3
+LUCIDE_VERSION := 1.23.0
+MARKEDJS_VERSION := 18.0.5
 HIGHLIGHTJS_VERSION := 11.11.1
-MERMAIDJS_VERSION := 11.12.3
+MERMAIDJS_VERSION := 11.16.0
 DOMPURIFY_VERSION := 3.4.11
 CODEMIRROR_BUNDLE := $(JS_DIR)/codemirror-bundle.min.js
 
@@ -105,6 +105,12 @@ build-all: verify-assets ## Build all platform binaries
 	@$(MAKE) build-for GOOS=linux GOARCH=arm64
 	@$(MAKE) build-for GOOS=darwin GOARCH=amd64
 	@$(MAKE) build-for GOOS=darwin GOARCH=arm64
+
+# =============================================================================
+# Test
+# =============================================================================
+test: ## Run unit tests
+	@go test ./...
 
 # =============================================================================
 # Docker

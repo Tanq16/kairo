@@ -38,14 +38,12 @@ func New(cfg Config) *Server {
 }
 
 func (s *Server) Setup() error {
-	// Initialize storage and service
 	storage, err := notes.NewStorage(s.config.DataDir)
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	s.service = notes.NewService(storage)
 
-	// Serve embedded static files
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		return fmt.Errorf("failed to create static filesystem: %w", err)
@@ -66,7 +64,6 @@ func (s *Server) Setup() error {
 	apiMux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.Handle("/api/", apiMux)
 
-	// Serve index.html at root
 	s.mux.HandleFunc("/", s.handleIndex)
 
 	return nil
