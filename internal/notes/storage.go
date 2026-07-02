@@ -1,7 +1,9 @@
 package notes
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,10 +13,6 @@ import (
 
 type FileStorage struct {
 	dataDir string
-}
-
-func (s *FileStorage) DataDir() string {
-	return s.dataDir
 }
 
 func NewStorage(dataDir string) (*FileStorage, error) {
@@ -31,9 +29,14 @@ func NewStorage(dataDir string) (*FileStorage, error) {
 }
 
 func (s *FileStorage) safePath(reqPath string) (string, error) {
-	clean := filepath.Clean(reqPath)
-	if strings.Contains(clean, "..") || strings.HasPrefix(clean, "/") || strings.HasPrefix(clean, "\\") {
-		return "", fmt.Errorf("invalid path")
+	if strings.HasPrefix(reqPath, "/") || strings.HasPrefix(reqPath, "\\") {
+		return "", ErrInvalidPath
+	}
+	// IsLocal rejects traversal without banning ".." inside legitimate names like "notes..md";
+	// "." (from an empty path) is rejected because the data root is never a valid target
+	clean := filepath.Clean(filepath.FromSlash(reqPath))
+	if clean == "." || !filepath.IsLocal(clean) {
+		return "", ErrInvalidPath
 	}
 	return filepath.Join(s.dataDir, clean), nil
 }
@@ -60,7 +63,7 @@ func (s *FileStorage) GetTree() (*FileNode, error) {
 		parts := strings.Split(relPath, string(os.PathSeparator))
 		current := root
 
-		for i := 0; i < len(parts)-1; i++ {
+		for i := range len(parts) - 1 {
 			part := parts[i]
 			found := false
 			for _, child := range current.Children {
@@ -125,9 +128,15 @@ func (s *FileStorage) Delete(path string) error {
 		return err
 	}
 	trashDir := filepath.Join(s.dataDir, ".trash")
-	timestamp := time.Now().Format("20060102_150405")
-	baseName := filepath.Base(fullPath)
-	trashPath := filepath.Join(trashDir, fmt.Sprintf("%s_%s", timestamp, baseName))
+	name := fmt.Sprintf("%s_%s", time.Now().Format("20060102_150405"), filepath.Base(fullPath))
+	trashPath := filepath.Join(trashDir, name)
+	// same-second deletes of a same-named file must not overwrite earlier trash entries
+	for n := 1; ; n++ {
+		if _, err := os.Lstat(trashPath); err != nil {
+			break
+		}
+		trashPath = filepath.Join(trashDir, fmt.Sprintf("%s_%d", name, n))
+	}
 	return os.Rename(fullPath, trashPath)
 }
 
@@ -140,8 +149,70 @@ func (s *FileStorage) Move(oldPath, newPath string) error {
 	if err != nil {
 		return err
 	}
+	// os.Rename silently replaces existing files, so refuse occupied destinations;
+	// on case-insensitive filesystems a case-only rename resolves to the source itself and stays allowed
+	if newInfo, err := os.Lstat(newFullPath); err == nil {
+		oldInfo, oldErr := os.Lstat(oldFullPath)
+		if oldErr != nil || !os.SameFile(oldInfo, newInfo) {
+			return ErrExists
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(newFullPath), 0755); err != nil {
 		return err
 	}
 	return os.Rename(oldFullPath, newFullPath)
+}
+
+func (s *FileStorage) SaveFileFrom(path string, r io.Reader) error {
+	fullPath, err := s.safePath(path)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		return err
+	}
+	// exclusive create so same-second uploads of a same-named file surface ErrExists instead of clobbering
+	f, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return ErrExists
+		}
+		return err
+	}
+	if _, err := io.Copy(f, r); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+func (s *FileStorage) Exists(path string) (bool, error) {
+	fullPath, err := s.safePath(path)
+	if err != nil {
+		return false, err
+	}
+	if _, err := os.Lstat(fullPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *FileStorage) RemoveDirIfEmpty(path string) error {
+	fullPath, err := s.safePath(path)
+	if err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return os.Remove(fullPath)
+	}
+	return nil
 }

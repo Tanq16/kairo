@@ -32,10 +32,10 @@ var rootCmd = &cobra.Command{
 		}
 		srv := server.New(cfg)
 		if err := srv.Setup(); err != nil {
-			log.Fatalf("ERROR [cmd] Failed to setup server: %v", err)
+			log.Fatalf("ERROR Failed to setup server: %v", err)
 		}
 		if err := srv.Run(); err != nil {
-			log.Fatalf("ERROR [cmd] Server error: %v", err)
+			log.Fatalf("ERROR Server error: %v", err)
 		}
 	},
 }

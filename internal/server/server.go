@@ -1,11 +1,16 @@
 package server
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/tanq16/kairo/internal/notes"
 )
@@ -33,30 +38,32 @@ func New(cfg Config) *Server {
 }
 
 func (s *Server) Setup() error {
-	// Initialize storage and service
 	storage, err := notes.NewStorage(s.config.DataDir)
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	s.service = notes.NewService(storage)
 
-	// Serve embedded static files
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		return fmt.Errorf("failed to create static filesystem: %w", err)
 	}
 	s.mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
-	// API routes
-	s.mux.HandleFunc("/api/tree", s.handleTree)
-	s.mux.HandleFunc("/api/file", s.handleFile)
-	s.mux.HandleFunc("/api/save", s.handleSave)
-	s.mux.HandleFunc("/api/create-dir", s.handleCreateDir)
-	s.mux.HandleFunc("/api/delete", s.handleDelete)
-	s.mux.HandleFunc("/api/move", s.handleMove)
-	s.mux.HandleFunc("/api/upload", s.handleUpload)
+	// API routes live on a sub-mux so the SPA catch-all can't shadow
+	// method enforcement (405) or unknown-endpoint 404s under /api/
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("GET /api/tree", s.handleTree)
+	apiMux.HandleFunc("GET /api/file", s.handleFile)
+	apiMux.HandleFunc("POST /api/save", s.handleSave)
+	apiMux.HandleFunc("POST /api/create-file", s.handleCreateFile)
+	apiMux.HandleFunc("POST /api/create-dir", s.handleCreateDir)
+	apiMux.HandleFunc("POST /api/delete", s.handleDelete)
+	apiMux.HandleFunc("POST /api/move", s.handleMove)
+	apiMux.HandleFunc("POST /api/upload", s.handleUpload)
+	apiMux.HandleFunc("GET /api/health", s.handleHealth)
+	s.mux.Handle("/api/", apiMux)
 
-	// Serve index.html at root
 	s.mux.HandleFunc("/", s.handleIndex)
 
 	return nil
@@ -64,9 +71,33 @@ func (s *Server) Setup() error {
 
 func (s *Server) Run() error {
 	addr := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
-	log.Printf("INFO [server] Starting on http://%s", addr)
-	log.Printf("INFO [server] Data directory: %s", s.config.DataDir)
-	return http.ListenAndServe(addr, s.mux)
+	// ReadTimeout/WriteTimeout stay unset so large uploads and downloads on slow links survive
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           s.mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		log.Printf("INFO Starting on http://%s", addr)
+		log.Printf("INFO Data directory: %s", s.config.DataDir)
+		errCh <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		log.Printf("INFO Shutting down")
+		return srv.Shutdown(shutdownCtx)
+	}
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {

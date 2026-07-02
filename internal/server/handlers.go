@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -12,16 +13,29 @@ import (
 	"github.com/tanq16/kairo/internal/notes"
 )
 
+// Keep raw error detail in the server log; return only a generic, path-free message to the client
+func writeServiceError(w http.ResponseWriter, action string, err error) {
+	switch {
+	case errors.Is(err, notes.ErrInvalidPath):
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+	case errors.Is(err, os.ErrNotExist):
+		http.Error(w, "Not found", http.StatusNotFound)
+	case errors.Is(err, notes.ErrExists):
+		http.Error(w, "Destination already exists", http.StatusConflict)
+	default:
+		log.Printf("ERROR Failed to %s: %v", action, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 func decodeBase64Path(encoded string) (string, error) {
 	if encoded == "" {
 		return "", nil
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
 	if err != nil {
-		// Attempt URL-safe padded decoding
 		decoded, err = base64.URLEncoding.DecodeString(encoded)
 		if err != nil {
-			// Attempt standard decoding
 			decoded, err = base64.StdEncoding.DecodeString(encoded)
 			if err != nil {
 				return "", err
@@ -34,7 +48,7 @@ func decodeBase64Path(encoded string) (string, error) {
 func (s *Server) handleTree(w http.ResponseWriter, r *http.Request) {
 	root, err := s.service.GetTree()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, "get tree", err)
 		return
 	}
 
@@ -52,11 +66,7 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 
 	content, err := s.service.GetFile(decodedPath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			http.Error(w, "File not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, "read file", err)
 		return
 	}
 
@@ -83,11 +93,34 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.service.SaveFile(decodedPath, req.Content); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, "save file", err)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
+	// reuse SaveRequest: create needs the same {path, content} shape, unlike autosave it never overwrites
+	var req notes.SaveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	decodedPath, err := decodeBase64Path(req.Path)
+	if err != nil {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	finalPath, err := s.service.CreateFile(decodedPath, req.Content)
+	if err != nil {
+		writeServiceError(w, "create file", err)
+		return
+	}
+
+	w.Write([]byte(finalPath))
 }
 
 func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +137,7 @@ func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.service.CreateDir(decodedPath); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, "create directory", err)
 		return
 	}
 
@@ -125,7 +158,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.service.Delete(decodedPath); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, "delete", err)
 		return
 	}
 
@@ -152,7 +185,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.service.Move(decodedOldPath, decodedNewPath); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, "move", err)
 		return
 	}
 
@@ -160,8 +193,14 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
+	// cap the whole request so oversized uploads fail instead of buffering unbounded input
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		http.Error(w, "File too large", http.StatusBadRequest)
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			http.Error(w, "File too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "Invalid multipart form", http.StatusBadRequest)
 		return
 	}
 
@@ -181,9 +220,14 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	relPath, err := s.service.UploadFile(decodedNotePath, file, header.Filename)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeServiceError(w, "upload file", err)
 		return
 	}
 
 	w.Write([]byte(relPath))
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
 }

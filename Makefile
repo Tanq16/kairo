@@ -1,4 +1,4 @@
-.PHONY: help assets verify-assets codemirror clean build build-for build-all docker-build docker-push version
+.PHONY: help assets verify-assets codemirror clean build build-for build-all test docker-build docker-push version
 
 # =============================================================================
 # Variables
@@ -18,10 +18,11 @@ CSS_DIR := $(STATIC_DIR)/css
 FONTS_DIR := $(STATIC_DIR)/fonts
 
 # Asset versions
-LUCIDE_VERSION := 0.575.0
-MARKEDJS_VERSION := 17.0.3
+LUCIDE_VERSION := 1.23.0
+MARKEDJS_VERSION := 18.0.5
 HIGHLIGHTJS_VERSION := 11.11.1
-MERMAIDJS_VERSION := 11.12.3
+MERMAIDJS_VERSION := 11.16.0
+DOMPURIFY_VERSION := 3.4.11
 CODEMIRROR_BUNDLE := $(JS_DIR)/codemirror-bundle.min.js
 
 # Console colors
@@ -50,6 +51,7 @@ assets: ## Download static assets
 	@curl -sL "https://cdn.jsdelivr.net/npm/marked@$(MARKEDJS_VERSION)/lib/marked.umd.js" -o "$(JS_DIR)/marked.min.js"
 	@curl -sL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/$(HIGHLIGHTJS_VERSION)/highlight.min.js" -o "$(JS_DIR)/highlight.min.js"
 	@curl -sL "https://cdn.jsdelivr.net/npm/mermaid@$(MERMAIDJS_VERSION)/dist/mermaid.min.js" -o "$(JS_DIR)/mermaid.min.js"
+	@curl -sL "https://cdn.jsdelivr.net/npm/dompurify@$(DOMPURIFY_VERSION)/dist/purify.min.js" -o "$(JS_DIR)/dompurify.min.js"
 	@curl -sL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/$(HIGHLIGHTJS_VERSION)/styles/github-dark.min.css" -o "$(CSS_DIR)/github-dark.min.css"
 	@curl -sL "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" -H "User-Agent: Mozilla/5.0" -o "$(CSS_DIR)/inter.css"
 	@grep -o "https://fonts.gstatic.com/[^)']*" "$(CSS_DIR)/inter.css" | sort -u | while read url; do \
@@ -103,6 +105,12 @@ build-all: verify-assets ## Build all platform binaries
 	@$(MAKE) build-for GOOS=linux GOARCH=arm64
 	@$(MAKE) build-for GOOS=darwin GOARCH=amd64
 	@$(MAKE) build-for GOOS=darwin GOARCH=arm64
+
+# =============================================================================
+# Test
+# =============================================================================
+test: ## Run unit tests
+	@go test ./...
 
 # =============================================================================
 # Docker
