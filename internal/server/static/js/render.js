@@ -222,7 +222,7 @@ function togglePreview(force = null) {
 
     if (previewMode) {
         const code = view.state.doc.toString();
-        els.markdownBody.innerHTML = marked.parse(code);
+        els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(code));
         fixImagePaths();
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {

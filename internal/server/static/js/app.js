@@ -231,10 +231,10 @@ async function loadFile(path, isDir = false) {
         editorLoading = false;
         editorPath = path;
         els.previewBtn.classList.remove('hidden');
-        unsaved = false;
-        els.unsavedIndicator.classList.add('hidden');
+        // Keep the badge if the outgoing file still has a queued or failed save
+        updateUnsavedIndicator();
 
-        els.markdownBody.innerHTML = marked.parse(content);
+        els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(content));
         fixImagePaths();
 
         addCopyButtons();
@@ -379,25 +379,29 @@ function initEventListeners() {
         let path = val;
 
         try {
-            let res;
             if (createMode === 'folder') {
-                res = await fetch('/api/create-dir', {
+                const res = await fetch('/api/create-dir', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: encPath(path) })
                 });
+                if (!res.ok) throw new Error('create failed: ' + res.status);
+                els.createModal.backdrop.classList.add('hidden');
+                await refreshTree();
             } else {
                 if(!path.endsWith('.md')) path += '.md';
-                res = await fetch('/api/save', {
+                const res = await fetch('/api/create-file', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: encPath(path), content: '# ' + val.replace(/\.md$/, '') })
                 });
+                if (!res.ok) throw new Error('create failed: ' + res.status);
+                // Server may suffix the name on collision, so open whatever path it actually created
+                const finalPath = await res.text();
+                els.createModal.backdrop.classList.add('hidden');
+                await refreshTree();
+                loadFile(finalPath);
             }
-            if (!res.ok) throw new Error('create failed: ' + res.status);
-            els.createModal.backdrop.classList.add('hidden');
-            await refreshTree();
-            if (createMode === 'file') loadFile(path);
         } catch (e) {
             console.error('Create failed:', e);
             showToast('Failed to create', 'error');

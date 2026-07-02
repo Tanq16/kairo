@@ -246,6 +246,92 @@ func TestServiceUploadFile(t *testing.T) {
 	})
 }
 
+func TestServiceCreateFile(t *testing.T) {
+	t.Run("fresh create returns name and writes content", func(t *testing.T) {
+		s := newTestStorage(t)
+		svc := NewService(s)
+		got, err := svc.CreateFile("note.md", "first")
+		if err != nil {
+			t.Fatalf("CreateFile: %v", err)
+		}
+		if got != "note.md" {
+			t.Fatalf("CreateFile returned %q, want %q", got, "note.md")
+		}
+		if b, err := s.ReadFile("note.md"); err != nil || string(b) != "first" {
+			t.Fatalf("ReadFile(note.md) = %q, %v; want %q", b, err, "first")
+		}
+	})
+
+	t.Run("collisions suffix -(N) before extension and leave originals intact", func(t *testing.T) {
+		s := newTestStorage(t)
+		svc := NewService(s)
+		steps := []struct {
+			content string
+			want    string
+		}{
+			{"first", "note.md"},
+			{"second", "note-(1).md"},
+			{"third", "note-(2).md"},
+		}
+		for _, st := range steps {
+			got, err := svc.CreateFile("note.md", st.content)
+			if err != nil {
+				t.Fatalf("CreateFile(note.md): %v", err)
+			}
+			if got != st.want {
+				t.Fatalf("CreateFile(note.md) returned %q, want %q", got, st.want)
+			}
+		}
+		// each create wrote a distinct file and never clobbered an earlier one
+		for _, st := range steps {
+			if b, err := s.ReadFile(st.want); err != nil || string(b) != st.content {
+				t.Fatalf("ReadFile(%q) = %q, %v; want %q", st.want, b, err, st.content)
+			}
+		}
+	})
+
+	t.Run("nested collision preserves directory", func(t *testing.T) {
+		s := newTestStorage(t)
+		svc := NewService(s)
+		if _, err := svc.CreateFile("docs/note.md", "a"); err != nil {
+			t.Fatalf("first CreateFile: %v", err)
+		}
+		got, err := svc.CreateFile("docs/note.md", "b")
+		if err != nil {
+			t.Fatalf("second CreateFile: %v", err)
+		}
+		if got != "docs/note-(1).md" {
+			t.Fatalf("CreateFile(docs/note.md) returned %q, want %q", got, "docs/note-(1).md")
+		}
+		if b, err := s.ReadFile("docs/note-(1).md"); err != nil || string(b) != "b" {
+			t.Fatalf("ReadFile(docs/note-(1).md) = %q, %v; want %q", b, err, "b")
+		}
+	})
+
+	t.Run("no-extension collision suffixes bare name", func(t *testing.T) {
+		s := newTestStorage(t)
+		svc := NewService(s)
+		if _, err := svc.CreateFile("readme", "a"); err != nil {
+			t.Fatalf("first CreateFile: %v", err)
+		}
+		got, err := svc.CreateFile("readme", "b")
+		if err != nil {
+			t.Fatalf("second CreateFile: %v", err)
+		}
+		if got != "readme-(1)" {
+			t.Fatalf("CreateFile(readme) returned %q, want %q", got, "readme-(1)")
+		}
+	})
+
+	t.Run("rejects traversal path", func(t *testing.T) {
+		s := newTestStorage(t)
+		svc := NewService(s)
+		if _, err := svc.CreateFile("../evil.md", "x"); !errors.Is(err, ErrInvalidPath) {
+			t.Fatalf("CreateFile with traversal path err = %v, want ErrInvalidPath", err)
+		}
+	})
+}
+
 func TestServiceMoveRewritesAttachments(t *testing.T) {
 	s := newTestStorage(t)
 	svc := NewService(s)

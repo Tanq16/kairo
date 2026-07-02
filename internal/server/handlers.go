@@ -102,6 +102,29 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
+	// reuse SaveRequest: create needs the same {path, content} shape, unlike autosave it never overwrites
+	var req notes.SaveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	decodedPath, err := decodeBase64Path(req.Path)
+	if err != nil {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	finalPath, err := s.service.CreateFile(decodedPath, req.Content)
+	if err != nil {
+		writeServiceError(w, "create file", err)
+		return
+	}
+
+	w.Write([]byte(finalPath))
+}
+
 func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 	var req notes.ActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

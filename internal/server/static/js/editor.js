@@ -7,6 +7,9 @@ let saveTimer = null;
 // Pending saves keyed by path so a failed save is never evicted by edits to another file
 const pendingSaves = new Map();
 let saveFailed = false;
+// Coalesces callers onto one in-flight drain: only one /api/save runs at a time and awaiting
+// callers (move/load) get the live drain promise instead of a no-op early return
+let flushPromise = null;
 
 function initEditor() {
     const {
@@ -103,10 +106,27 @@ function debounceSave(path, content) {
     saveTimer = setTimeout(flushPendingSave, 1000);
 }
 
-async function flushPendingSave() {
+// Badge tracks whether any real save is still queued (pending or failed), not just the live doc
+function updateUnsavedIndicator() {
+    unsaved = pendingSaves.size > 0;
+    els.unsavedIndicator.classList.toggle('hidden', !unsaved);
+}
+
+function flushPendingSave() {
+    if (!flushPromise) {
+        flushPromise = drainPendingSaves().finally(() => { flushPromise = null; });
+    }
+    return flushPromise;
+}
+
+async function drainPendingSaves() {
     clearTimeout(saveTimer);
     saveTimer = null;
-    for (const [path, content] of [...pendingSaves]) {
+    // Snapshot the queued paths so a persistently failing save skips ahead instead of starving
+    // the rest; re-read content per path to pick up edits that landed while a save was in flight
+    for (const path of [...pendingSaves.keys()]) {
+        const content = pendingSaves.get(path);
+        if (content === undefined) continue; // dropped by a concurrent move/discard
         try {
             const res = await fetch('/api/save', {
                 method: 'POST',
@@ -115,20 +135,17 @@ async function flushPendingSave() {
             });
             if (!res.ok) throw new Error('save failed: ' + res.status);
             saveFailed = false;
-            // Newer edits may have arrived while this save was in flight
+            // Keep the entry if a newer edit landed mid-flight so it gets re-saved next pass
             if (pendingSaves.get(path) === content) pendingSaves.delete(path);
         } catch (e) {
             console.error('Save failed:', e);
-            // Failed entries stay queued so beforeunload or the next flush can retry them;
-            // toast only on the transition into the failed state, not every keystroke
+            // Toast only on the transition into the failed state, not every keystroke; leave the
+            // entry queued for the next debounce/beforeunload and move on to the next path
             if (!saveFailed) showToast('Failed to save', 'error');
             saveFailed = true;
         }
     }
-    if (pendingSaves.size === 0) {
-        unsaved = false;
-        els.unsavedIndicator.classList.add('hidden');
-    }
+    updateUnsavedIndicator();
 }
 
 function discardPendingSave(path) {

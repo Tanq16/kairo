@@ -30,6 +30,25 @@ func (s *Service) SaveFile(path string, content string) error {
 	return s.storage.SaveFile(path, []byte(content))
 }
 
+func (s *Service) CreateFile(p, content string) (string, error) {
+	ext := path.Ext(p)
+	stem := strings.TrimSuffix(p, ext)
+	// mirror UploadFile: suffix "-(N)" before the extension so a create never overwrites an existing file
+	for n := 0; ; n++ {
+		candidate := p
+		if n > 0 {
+			candidate = fmt.Sprintf("%s-(%d)%s", stem, n, ext)
+		}
+		err := s.storage.SaveFileFrom(candidate, strings.NewReader(content))
+		if err == nil {
+			return candidate, nil
+		}
+		if !errors.Is(err, ErrExists) {
+			return "", err
+		}
+	}
+}
+
 func (s *Service) CreateDir(path string) error {
 	return s.storage.CreateDir(path)
 }
