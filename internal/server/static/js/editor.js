@@ -122,27 +122,42 @@ function flushPendingSave() {
 async function drainPendingSaves() {
     clearTimeout(saveTimer);
     saveTimer = null;
-    // Snapshot the queued paths so a persistently failing save skips ahead instead of starving
-    // the rest; re-read content per path to pick up edits that landed while a save was in flight
-    for (const path of [...pendingSaves.keys()]) {
-        const content = pendingSaves.get(path);
-        if (content === undefined) continue; // dropped by a concurrent move/discard
-        try {
-            const res = await fetch('/api/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: encPath(path), content })
-            });
-            if (!res.ok) throw new Error('save failed: ' + res.status);
-            saveFailed = false;
-            // Keep the entry if a newer edit landed mid-flight so it gets re-saved next pass
-            if (pendingSaves.get(path) === content) pendingSaves.delete(path);
-        } catch (e) {
-            console.error('Save failed:', e);
-            // Toast only on the transition into the failed state, not every keystroke; leave the
-            // entry queued for the next debounce/beforeunload and move on to the next path
-            if (!saveFailed) showToast('Failed to save', 'error');
-            saveFailed = true;
+    // Loop until the queue is empty so an awaiting caller (loadFile/moveItem) is guaranteed the
+    // edits are persisted, and edits that arrive mid-drain aren't stranded without a timer. Each
+    // pass re-snapshots the keys so a failing save skips ahead instead of starving the rest.
+    while (pendingSaves.size) {
+        let progressed = false;
+        let failed = false;
+        for (const path of [...pendingSaves.keys()]) {
+            const content = pendingSaves.get(path);
+            if (content === undefined) continue; // dropped by a concurrent move/discard
+            try {
+                const res = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: encPath(path), content })
+                });
+                if (!res.ok) throw new Error('save failed: ' + res.status);
+                saveFailed = false;
+                // Keep the entry if a newer edit landed mid-flight so it gets re-saved next pass
+                if (pendingSaves.get(path) === content) {
+                    pendingSaves.delete(path);
+                    progressed = true;
+                }
+            } catch (e) {
+                console.error('Save failed:', e);
+                // Toast only on the transition into the failed state, not every keystroke; leave the
+                // entry queued for the next debounce/beforeunload and move on to the next path
+                if (!saveFailed) showToast('Failed to save', 'error');
+                saveFailed = true;
+                failed = true;
+            }
+        }
+        // Stop looping on a failure (retry via the re-armed timer, never hot-spin) or when a pass
+        // persisted nothing new; re-arm so anything still queued gets another attempt.
+        if (failed || !progressed) {
+            if (pendingSaves.size) saveTimer = setTimeout(flushPendingSave, 1000);
+            break;
         }
     }
     updateUnsavedIndicator();

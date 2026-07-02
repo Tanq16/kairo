@@ -175,8 +175,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // --- File Operations ---
 async function loadFile(path, isDir = false) {
-    // Persist edits to the previous file before the editor is repurposed
-    flushPendingSave();
+    // Persist edits to the previous file before the editor is repurposed, so the fetch below can't
+    // race an in-flight save and load stale content
+    await flushPendingSave();
 
     const thisLoad = ++loadVersion;
     currentPath = path;
@@ -223,12 +224,16 @@ async function loadFile(path, isDir = false) {
         const content = await res.text();
         if (thisLoad !== loadVersion) return;
 
-        // The programmatic dispatch must not arm an autosave for the fresh content
+        // The programmatic dispatch must not arm an autosave for the fresh content; the finally
+        // guarantees the flag resets even if dispatch throws, so autosave can't wedge off
         editorLoading = true;
-        view.dispatch({
-            changes: { from: 0, to: view.state.doc.length, insert: content }
-        });
-        editorLoading = false;
+        try {
+            view.dispatch({
+                changes: { from: 0, to: view.state.doc.length, insert: content }
+            });
+        } finally {
+            editorLoading = false;
+        }
         editorPath = path;
         els.previewBtn.classList.remove('hidden');
         // Keep the badge if the outgoing file still has a queued or failed save
