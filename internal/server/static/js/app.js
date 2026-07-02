@@ -1,4 +1,3 @@
-// --- App State & Elements ---
 const els = {
     editor: document.getElementById('editor'),
     editorContainer: document.getElementById('editor-container'),
@@ -136,7 +135,6 @@ function goHome() {
     refreshTree();
 }
 
-// --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
     lucide.createIcons();
     initMarked();
@@ -155,7 +153,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Add drag and drop to the root file tree
     els.fileTree.ondragover = (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
@@ -173,16 +170,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 });
 
-// --- File Operations ---
 async function loadFile(path, isDir = false) {
-    // Persist edits to the previous file before the editor is repurposed, so the fetch below can't
-    // race an in-flight save and load stale content
+    // Persist the previous file before the fetch below, so a switch can't load stale content over an in-flight save
     await flushPendingSave();
 
     const thisLoad = ++loadVersion;
     currentPath = path;
-    // The editor still holds the previous note, so its doc must not autosave under the new path;
-    // the preview toggle stays hidden until a fresh doc is actually loaded
+    // Null while the editor still holds the previous note, so its doc can't autosave under the new path
     editorPath = null;
     updateBreadcrumbs(path);
     window.history.replaceState(null, '', path ? `?path=${encPath(path)}` : '/');
@@ -224,8 +218,7 @@ async function loadFile(path, isDir = false) {
         const content = await res.text();
         if (thisLoad !== loadVersion) return;
 
-        // The programmatic dispatch must not arm an autosave for the fresh content; the finally
-        // guarantees the flag resets even if dispatch throws, so autosave can't wedge off
+        // Suppress autosave for the programmatic load; finally resets the flag even if dispatch throws
         editorLoading = true;
         try {
             view.dispatch({
@@ -249,7 +242,6 @@ async function loadFile(path, isDir = false) {
         }
         lucide.createIcons();
 
-        // Default to preview mode
         togglePreview(true);
     } catch(e) {
         if (thisLoad !== loadVersion) return;
@@ -316,7 +308,6 @@ async function moveItem(oldPath, newPath) {
     }
 }
 
-// --- Event Listeners ---
 function initEventListeners() {
     els.previewBtn.addEventListener('click', () => togglePreview());
     if (els.printBtn) {
@@ -326,7 +317,6 @@ function initEventListeners() {
         });
     }
 
-    // Sidebar toggles
     els.mobileMenuBtn.addEventListener('click', () => {
         els.sidebar.style.transform = 'translateX(0)';
         els.sidebarOverlay.classList.remove('hidden');
@@ -336,11 +326,9 @@ function initEventListeners() {
         els.sidebarOverlay.classList.add('hidden');
     });
 
-    // Kairo home buttons
     document.getElementById('kairo-home')?.addEventListener('click', goHome);
     document.getElementById('kairo-home-mobile')?.addEventListener('click', goHome);
 
-    // Desktop sidebar toggle
     els.desktopSidebarToggle.addEventListener('click', () => {
         sidebarCollapsed = !sidebarCollapsed;
         if (sidebarCollapsed) {
@@ -352,7 +340,6 @@ function initEventListeners() {
         }
     });
 
-    // Create Modal
     if(els.addFileBtn) {
         els.addFileBtn.addEventListener('click', () => {
             createMode = 'file';
@@ -423,7 +410,6 @@ function initEventListeners() {
         }
     });
 
-    // Move Modal
     els.moveBtn.addEventListener('click', () => {
         if (!currentPath) return;
         els.moveModal.current.value = currentPath;
@@ -457,7 +443,6 @@ function initEventListeners() {
         }
     });
 
-    // Delete Modal
     els.deleteBtn.addEventListener('click', () => {
         if (!currentPath) return;
         els.deleteModal.path.textContent = currentPath;
@@ -499,7 +484,6 @@ function initEventListeners() {
     });
 }
 
-// --- File Tree ---
 async function refreshTree() {
     try {
         const res = await fetch('/api/tree');
@@ -539,7 +523,6 @@ function renderTree(nodes, container) {
         row.appendChild(icon);
         row.appendChild(name);
 
-        // Implement drag and drop logic
         row.draggable = true;
         row.ondragstart = (e) => {
             e.stopPropagation();
@@ -602,7 +585,6 @@ function renderTree(nodes, container) {
 
         div.appendChild(row);
 
-        // Auto-expand if previously expanded
         if (node.isDir && expandedFolders.has(node.path)) {
             const childDiv = document.createElement('div');
             childDiv.className = 'children border-l border-surface1 ml-2';

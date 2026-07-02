@@ -1,4 +1,3 @@
-// --- Editor (CodeMirror 6), Autosave, Uploads ---
 let view;
 let editorLoading = false;
 // Path the editor document belongs to; null while the doc is stale (image/folder/nothing open)
@@ -7,8 +6,7 @@ let saveTimer = null;
 // Pending saves keyed by path so a failed save is never evicted by edits to another file
 const pendingSaves = new Map();
 let saveFailed = false;
-// Coalesces callers onto one in-flight drain: only one /api/save runs at a time and awaiting
-// callers (move/load) get the live drain promise instead of a no-op early return
+// One in-flight drain at a time; awaiting callers (move/load) get the live promise, not an early return
 let flushPromise = null;
 
 function initEditor() {
@@ -22,7 +20,6 @@ function initEditor() {
         tags
     } = CM;
 
-    // Catppuccin Mocha theme
     const catppuccinTheme = EditorView.theme({
         '&': {
             backgroundColor: '#1e1e2e',
@@ -43,7 +40,6 @@ function initEditor() {
         },
     }, { dark: true });
 
-    // Syntax highlighting colors
     const catppuccinHighlight = HighlightStyle.define([
         { tag: tags.heading1, color: '#b4befe', fontWeight: 'bold' },
         { tag: tags.heading2, color: '#cba6f7', fontWeight: 'bold' },
@@ -122,9 +118,7 @@ function flushPendingSave() {
 async function drainPendingSaves() {
     clearTimeout(saveTimer);
     saveTimer = null;
-    // Loop until the queue is empty so an awaiting caller (loadFile/moveItem) is guaranteed the
-    // edits are persisted, and edits that arrive mid-drain aren't stranded without a timer. Each
-    // pass re-snapshots the keys so a failing save skips ahead instead of starving the rest.
+    // Drain to empty so awaiting callers see edits persisted; re-snapshot each pass so a failing save skips ahead, not starves the rest
     while (pendingSaves.size) {
         let progressed = false;
         let failed = false;
@@ -146,15 +140,13 @@ async function drainPendingSaves() {
                 }
             } catch (e) {
                 console.error('Save failed:', e);
-                // Toast only on the transition into the failed state, not every keystroke; leave the
-                // entry queued for the next debounce/beforeunload and move on to the next path
+                // Toast once on entering the failed state; leave the entry queued for the next debounce/beforeunload
                 if (!saveFailed) showToast('Failed to save', 'error');
                 saveFailed = true;
                 failed = true;
             }
         }
-        // Stop looping on a failure (retry via the re-armed timer, never hot-spin) or when a pass
-        // persisted nothing new; re-arm so anything still queued gets another attempt.
+        // Stop on a failure or a no-progress pass; re-arm the timer to retry rather than hot-spin
         if (failed || !progressed) {
             if (pendingSaves.size) saveTimer = setTimeout(flushPendingSave, 1000);
             break;

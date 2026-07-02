@@ -1,4 +1,3 @@
-// --- Markdown Rendering & Preview ---
 const mermaidConfig = {
     startOnLoad: false,
     theme: 'base',
@@ -23,7 +22,6 @@ const mermaidConfig = {
         noteBkgColor: '#45475a',
         noteTextColor: '#f9e2af',
         noteBorderColor: '#585b70',
-        // Flowchart
         nodeBkg: '#313244',
         nodeBorder: '#89b4fa',
         clusterBkg: '#181825',
@@ -31,7 +29,6 @@ const mermaidConfig = {
         defaultLinkColor: '#89b4fa',
         edgeLabelBackground: '#313244',
         nodeTextColor: '#cdd6f4',
-        // Sequence
         actorBkg: '#313244',
         actorBorder: '#89b4fa',
         actorTextColor: '#cdd6f4',
@@ -45,7 +42,6 @@ const mermaidConfig = {
         activationBorderColor: '#cba6f7',
         activationBkgColor: '#45475a',
         sequenceNumberColor: '#1e1e2e',
-        // Gantt
         sectionBkgColor: '#181825',
         altSectionBkgColor: '#1e1e2e',
         sectionBkgColor2: '#11111b',
@@ -64,7 +60,6 @@ const mermaidConfig = {
         critBorderColor: '#eba0ac',
         gridColor: '#313244',
         todayLineColor: '#f38ba8',
-        // Pie
         pie1: '#cba6f7', pie2: '#89b4fa', pie3: '#a6e3a1', pie4: '#f9e2af',
         pie5: '#f38ba8', pie6: '#94e2d5', pie7: '#fab387', pie8: '#89dceb',
         pie9: '#f5c2e7', pie10: '#74c7ec', pie11: '#eba0ac', pie12: '#b4befe',
@@ -73,7 +68,6 @@ const mermaidConfig = {
         pieLegendTextColor: '#cdd6f4',
         pieStrokeColor: '#1e1e2e',
         pieOuterStrokeColor: '#313244',
-        // Git
         git0: '#89b4fa', git1: '#cba6f7', git2: '#a6e3a1', git3: '#f9e2af',
         git4: '#f38ba8', git5: '#94e2d5', git6: '#fab387', git7: '#74c7ec',
         gitInv0: '#1e1e2e', gitInv1: '#1e1e2e', gitInv2: '#1e1e2e', gitInv3: '#1e1e2e',
@@ -83,9 +77,7 @@ const mermaidConfig = {
         tagLabelColor: '#1e1e2e',
         tagLabelBackground: '#f9e2af',
         tagLabelBorder: '#fab387',
-        // State
         labelBackgroundColor: '#313244',
-        // Color scale (mindmaps, timelines, etc.)
         cScale0: '#313244', cScale1: '#89b4fa', cScale2: '#cba6f7', cScale3: '#a6e3a1',
         cScale4: '#f9e2af', cScale5: '#f38ba8', cScale6: '#94e2d5', cScale7: '#fab387',
         cScale8: '#89dceb', cScale9: '#f5c2e7', cScale10: '#74c7ec', cScale11: '#b4befe',
@@ -206,8 +198,7 @@ function fixImagePaths() {
     els.markdownBody.querySelectorAll('img').forEach(img => {
         let src = img.getAttribute('src');
         if (src && !src.startsWith('http') && !src.startsWith('data:')) {
-            // Markdown links are percent-encoded but files are stored raw, so decode before hitting the API;
-            // legacy links with a literal % keep their raw form
+            // Links are percent-encoded but files are stored raw, so decode before the API (literal-% legacy links keep their raw form)
             try { src = decodeURIComponent(src); } catch (e) {}
             // Relative markdown paths resolve against the note's directory, served via the file API
             const currentDir = currentPath ? currentPath.substring(0, currentPath.lastIndexOf('/')) : '';

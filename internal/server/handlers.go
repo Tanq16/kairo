@@ -13,7 +13,7 @@ import (
 	"github.com/tanq16/kairo/internal/notes"
 )
 
-// writeServiceError maps service errors to HTTP statuses; raw details stay in server logs only
+// Keep raw error detail in the server log; return only a generic, path-free message to the client
 func writeServiceError(w http.ResponseWriter, action string, err error) {
 	switch {
 	case errors.Is(err, notes.ErrInvalidPath):
@@ -34,10 +34,8 @@ func decodeBase64Path(encoded string) (string, error) {
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
 	if err != nil {
-		// Attempt URL-safe padded decoding
 		decoded, err = base64.URLEncoding.DecodeString(encoded)
 		if err != nil {
-			// Attempt standard decoding
 			decoded, err = base64.StdEncoding.DecodeString(encoded)
 			if err != nil {
 				return "", err
