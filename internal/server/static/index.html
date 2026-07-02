@@ -66,7 +66,7 @@
         /* Print media styles */
         @media print {
             body { background: white !important; color: black !important; }
-            #sidebar, .h-14.bg-crust.z-20, #create-modal, #move-modal, #delete-modal, .copy-code-btn { display: none !important; }
+            #sidebar, .h-14.bg-crust.z-20, #create-modal, #move-modal, #delete-modal, #toast, .copy-code-btn { display: none !important; }
             main { padding: 0 !important; margin: 0 !important; height: auto !important; overflow: visible !important; }
             #preview-container { display: block !important; position: static !important; overflow: visible !important; padding: 0 !important; }
             #editor-container { display: none !important; }
@@ -372,7 +372,7 @@
                     <i data-lucide="eye" class="w-4 h-4"></i>
                     <span>Preview</span>
                 </button>
-                <button id="delete-btn" class="text-red hover:bg-surface0 p-2 rounded" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                <button id="delete-btn" class="text-red hover:bg-surface0 p-2 rounded hidden" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
             </div>
         </div>
 
@@ -432,10 +432,11 @@
         <div class="bg-mantle border border-surface1 rounded-xl p-6 w-96">
             <h3 class="font-bold text-red mb-4 flex items-center gap-2">
                 <i data-lucide="trash-2" class="w-5 h-5"></i>
-                Delete File
+                Delete Item
             </h3>
             <p class="text-subtext0 mb-2">Are you sure you want to delete:</p>
-            <p id="delete-path" class="text-text font-mono text-sm bg-surface0 rounded px-3 py-2 mb-4 break-all"></p>
+            <p id="delete-path" class="text-text font-mono text-sm bg-surface0 rounded px-3 py-2 mb-2 break-all"></p>
+            <p class="text-subtext0 text-sm mb-4">Folders are deleted along with everything inside them.</p>
             <div class="flex justify-end gap-2">
                 <button id="delete-cancel" class="text-subtext0 px-3 py-1 hover:bg-surface0 rounded">Cancel</button>
                 <button id="delete-confirm" class="bg-red text-base font-bold px-3 py-1 rounded">Delete</button>
@@ -443,6 +444,15 @@
         </div>
     </div>
     
+    <!-- Toast -->
+    <div id="toast" class="fixed bottom-4 right-4 z-[60] hidden">
+        <div class="bg-surface0 text-text px-4 py-2 rounded-lg shadow-lg border border-surface1">
+            <span id="toast-message"></span>
+        </div>
+    </div>
+
+    <script src="/static/js/render.js"></script>
+    <script src="/static/js/editor.js"></script>
     <script src="/static/js/app.js"></script>
     <script>
         // Initialize Lucide icons after page load

@@ -75,7 +75,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.26'
 
       - name: Download Assets and Build CodeMirror
         run: make assets && make codemirror

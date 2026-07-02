@@ -1,5 +1,16 @@
 package notes
 
+import (
+	"errors"
+	"io"
+)
+
+// Sentinels let handlers map storage failures to HTTP statuses without leaking paths.
+var (
+	ErrInvalidPath = errors.New("invalid path")
+	ErrExists      = errors.New("destination already exists")
+)
+
 type FileNode struct {
 	Name     string      `json:"name"`
 	Path     string      `json:"path"` // Relative path
@@ -21,8 +32,10 @@ type Store interface {
 	GetTree() (*FileNode, error)
 	ReadFile(path string) ([]byte, error)
 	SaveFile(path string, content []byte) error
+	SaveFileFrom(path string, r io.Reader) error
 	CreateDir(path string) error
 	Delete(path string) error
 	Move(oldPath, newPath string) error
-	DataDir() string
+	Exists(path string) (bool, error)
+	RemoveDirIfEmpty(path string) error
 }
