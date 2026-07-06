@@ -2,7 +2,10 @@ module github.com/tanq16/kairo
 
 go 1.26
 
-require github.com/spf13/cobra v1.10.2
+require (
+	github.com/sahilm/fuzzy v0.1.3
+	github.com/spf13/cobra v1.10.2
+)
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

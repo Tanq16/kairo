@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func newTestStorage(t *testing.T) *FileStorage {
@@ -460,6 +461,108 @@ func TestGetTree(t *testing.T) {
 			t.Fatalf("deep node path = %q, want %q", deep.Path, filepath.Join("docs", "sub", "deep.md"))
 		}
 	})
+}
+
+func TestServiceSearch(t *testing.T) {
+	type tfile struct{ path, content string }
+	tests := []struct {
+		name  string
+		files []tfile
+		query string
+		want  []SearchResult
+	}{
+		{
+			name:  "fuzzy filename match ranks ahead of content match",
+			files: []tfile{{"server.md", "alpha\nbeta"}, {"guide.md", "one\nconfigure the server\nthree"}},
+			query: "server",
+			want: []SearchResult{
+				{Path: "server.md", Name: "server.md"},
+				{Path: "guide.md", Name: "guide.md", Snippet: "configure the server", Line: 2},
+			},
+		},
+		{
+			name:  "fuzzy subsequence matches non-contiguous filename in subfolder",
+			files: []tfile{{"docs/server-notes.md", "body text"}},
+			query: "srvnotes",
+			want:  []SearchResult{{Path: filepath.Join("docs", "server-notes.md"), Name: "server-notes.md"}},
+		},
+		{
+			name:  "case-insensitive filename match",
+			files: []tfile{{"README.md", "readme body"}},
+			query: "readme",
+			want:  []SearchResult{{Path: "README.md", Name: "README.md"}},
+		},
+		{
+			name:  "content match reports trimmed snippet and 1-based line",
+			files: []tfile{{"notes.md", "first\n   padded keyword line   \nlast"}},
+			query: "keyword",
+			want:  []SearchResult{{Path: "notes.md", Name: "notes.md", Snippet: "padded keyword line", Line: 2}},
+		},
+		{
+			name:  "multibyte snippet is rune-capped and stays valid UTF-8",
+			files: []tfile{{"long.md", strings.Repeat("é", 200)}},
+			query: "é",
+			want:  []SearchResult{{Path: "long.md", Name: "long.md", Snippet: strings.Repeat("é", 160), Line: 1}},
+		},
+		{
+			name:  "empty query returns nil",
+			files: []tfile{{"a.md", "server content"}},
+			query: "",
+			want:  nil,
+		},
+		{
+			name:  "whitespace-only query returns nil",
+			files: []tfile{{"a.md", "server content"}},
+			query: "   ",
+			want:  nil,
+		},
+		{
+			name:  "non-md files are excluded from name and content matches",
+			files: []tfile{{"match.txt", "this line has match in it"}, {"keep.md", "unrelated"}},
+			query: "match",
+			want:  nil,
+		},
+		{
+			name:  "file matched by name is not duplicated as a content hit",
+			files: []tfile{{"report.md", "this report is detailed"}},
+			query: "report",
+			want:  []SearchResult{{Path: "report.md", Name: "report.md"}},
+		},
+		{
+			name:  "no match is excluded",
+			files: []tfile{{"alpha.md", "beta gamma"}, {"delta.md", "epsilon"}},
+			query: "zzzznomatch",
+			want:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStorage(t)
+			for _, f := range tt.files {
+				writeFile(t, s, f.path, f.content)
+			}
+			got, err := NewService(s).Search(tt.query)
+			if err != nil {
+				t.Fatalf("Search(%q): %v", tt.query, err)
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("Search(%q) = %+v, want %+v", tt.query, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("Search(%q)[%d] = %+v, want %+v", tt.query, i, got[i], tt.want[i])
+				}
+				// the rune-cap must never split a multibyte char or exceed the bound
+				if !utf8.ValidString(got[i].Snippet) {
+					t.Fatalf("Search(%q)[%d] snippet not valid UTF-8: %q", tt.query, i, got[i].Snippet)
+				}
+				if n := utf8.RuneCountInString(got[i].Snippet); n > 160 {
+					t.Fatalf("Search(%q)[%d] snippet has %d runes, want <=160", tt.query, i, n)
+				}
+			}
+		})
+	}
 }
 
 func childNames(n *FileNode) []string {

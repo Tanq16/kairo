@@ -211,12 +211,14 @@ function initUploadHandlers() {
     });
     els.editorContainer.addEventListener('drop', async (e) => {
         if (!currentPath || previewMode) return;
-        const files = e.dataTransfer.files;
-        for (const file of files) {
-            if (file.type.startsWith('image/')) {
-                e.preventDefault();
-                await uploadAndInsertImage(file);
-            }
+        const images = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+        if (!images.length) return;
+        e.preventDefault();
+        // posAtCoords is null when dropped outside the text; then fall back to the existing caret
+        const dropPos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+        if (dropPos != null) view.dispatch({ selection: { anchor: dropPos } });
+        for (const file of images) {
+            await uploadAndInsertImage(file);
         }
     });
 }
@@ -229,9 +231,8 @@ async function uploadAndInsertImage(file) {
         const res = await fetch('/api/upload', { method: 'POST', body: formData });
         if (!res.ok) throw new Error('upload failed: ' + res.status);
         const imgPath = await res.text();
-        view.dispatch({
-            changes: { from: view.state.doc.length, insert: `\n![Attachment](${encodeURI(imgPath)})\n` }
-        });
+        view.dispatch(view.state.replaceSelection(`![Attachment](${encodeURI(imgPath)})`));
+        view.focus();
         await refreshTree();
     } catch (e) {
         console.error('Upload failed:', e);

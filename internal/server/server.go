@@ -55,6 +55,7 @@ func (s *Server) Setup() error {
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("GET /api/tree", s.handleTree)
 	apiMux.HandleFunc("GET /api/file", s.handleFile)
+	apiMux.HandleFunc("GET /api/search", s.handleSearch)
 	apiMux.HandleFunc("POST /api/save", s.handleSave)
 	apiMux.HandleFunc("POST /api/create-file", s.handleCreateFile)
 	apiMux.HandleFunc("POST /api/create-dir", s.handleCreateDir)

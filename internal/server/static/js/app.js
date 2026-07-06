@@ -16,6 +16,12 @@ const els = {
     addFileBtn: document.getElementById('add-file-btn'),
     addFolderBtn: document.getElementById('add-folder-btn'),
     moveBtn: document.getElementById('move-btn'),
+    searchBtn: document.getElementById('search-btn'),
+    searchModal: {
+        backdrop: document.getElementById('search-modal'),
+        input: document.getElementById('search-input'),
+        results: document.getElementById('search-results')
+    },
     createModal: {
         backdrop: document.getElementById('create-modal'),
         input: document.getElementById('create-input'),
@@ -40,7 +46,7 @@ const els = {
 let currentPath = null;
 let unsaved = false;
 let previewMode = false;
-let sidebarCollapsed = false;
+let sidebarCollapsed = localStorage.getItem('kairo-sidebar-collapsed') === 'true';
 let loadVersion = 0;
 let treeData = [];
 let createMode = 'file';
@@ -89,6 +95,11 @@ function showToast(message, type = 'info') {
 
 function saveExpandedFolders() {
     localStorage.setItem('kairo-expanded-folders', JSON.stringify([...expandedFolders]));
+}
+
+function applySidebarCollapsed() {
+    els.sidebar.classList.toggle('collapsed', sidebarCollapsed);
+    els.desktopSidebarToggle.classList.toggle('sidebar-collapsed', sidebarCollapsed);
 }
 
 function updateBreadcrumbs(path) {
@@ -141,6 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initEditor();
     initUploadHandlers();
     initEventListeners();
+    initSearch();
     await refreshTree();
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -329,15 +341,11 @@ function initEventListeners() {
     document.getElementById('kairo-home')?.addEventListener('click', goHome);
     document.getElementById('kairo-home-mobile')?.addEventListener('click', goHome);
 
+    applySidebarCollapsed();
     els.desktopSidebarToggle.addEventListener('click', () => {
         sidebarCollapsed = !sidebarCollapsed;
-        if (sidebarCollapsed) {
-            els.sidebar.classList.add('collapsed');
-            els.desktopSidebarToggle.classList.add('sidebar-collapsed');
-        } else {
-            els.sidebar.classList.remove('collapsed');
-            els.desktopSidebarToggle.classList.remove('sidebar-collapsed');
-        }
+        applySidebarCollapsed();
+        localStorage.setItem('kairo-sidebar-collapsed', String(sidebarCollapsed));
     });
 
     if(els.addFileBtn) {
@@ -593,5 +601,110 @@ function renderTree(nodes, container) {
         }
 
         container.appendChild(div);
+    });
+}
+
+let searchTimer;
+let searchRows = [];
+let searchSelectedIndex = -1;
+
+function isSearchOpen() {
+    return !els.searchModal.backdrop.classList.contains('hidden');
+}
+
+function openSearch() {
+    els.searchModal.backdrop.classList.remove('hidden');
+    els.searchModal.input.value = '';
+    renderSearchResults([]);
+    els.searchModal.input.focus();
+}
+
+function closeSearch() {
+    els.searchModal.backdrop.classList.add('hidden');
+}
+
+function highlightSearchRow(index) {
+    searchRows.forEach((row, i) => row.classList.toggle('bg-surface0', i === index));
+    searchSelectedIndex = index;
+    if (index >= 0 && searchRows[index]) searchRows[index].scrollIntoView({ block: 'nearest' });
+}
+
+function renderSearchResults(results) {
+    els.searchModal.results.innerHTML = '';
+    searchRows = [];
+    searchSelectedIndex = -1;
+
+    results.forEach(r => {
+        const row = document.createElement('div');
+        row.className = 'px-3 py-2 cursor-pointer hover:bg-surface0';
+
+        const name = document.createElement('div');
+        name.className = 'text-subtext1 text-sm font-medium';
+        name.textContent = r.name;
+        row.appendChild(name);
+
+        const sub = document.createElement('div');
+        sub.className = 'text-overlay1 text-xs truncate';
+        sub.textContent = r.snippet ? `${r.path} — ${r.snippet}` : r.path;
+        row.appendChild(sub);
+
+        row.addEventListener('click', () => {
+            closeSearch();
+            loadFile(r.path);
+        });
+        els.searchModal.results.appendChild(row);
+        searchRows.push(row);
+    });
+}
+
+async function runSearch(q) {
+    try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        if (!res.ok) throw new Error('search failed: ' + res.status);
+        renderSearchResults((await res.json()) || []);
+    } catch (e) {
+        console.error('Search failed:', e);
+        showToast('Search failed', 'error');
+    }
+}
+
+function initSearch() {
+    els.searchBtn.addEventListener('click', openSearch);
+
+    document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            openSearch();
+        } else if (e.key === 'Escape' && isSearchOpen()) {
+            closeSearch();
+        }
+    });
+
+    els.searchModal.backdrop.addEventListener('click', (e) => {
+        if (e.target === els.searchModal.backdrop) closeSearch();
+    });
+
+    els.searchModal.input.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        const q = els.searchModal.input.value.trim();
+        if (q.length < 2) {
+            renderSearchResults([]);
+            return;
+        }
+        searchTimer = setTimeout(() => runSearch(q), 150);
+    });
+
+    els.searchModal.input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (searchRows.length) highlightSearchRow(Math.min(searchSelectedIndex + 1, searchRows.length - 1));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (searchRows.length) highlightSearchRow(Math.max(searchSelectedIndex - 1, 0));
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            const row = searchRows[searchSelectedIndex >= 0 ? searchSelectedIndex : 0];
+            if (row) row.click();
+        }
     });
 }

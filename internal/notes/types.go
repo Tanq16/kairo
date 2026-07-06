@@ -18,6 +18,13 @@ type FileNode struct {
 	Children []*FileNode `json:"children,omitempty"`
 }
 
+type SearchResult struct {
+	Path    string `json:"path"`
+	Name    string `json:"name"`
+	Snippet string `json:"snippet,omitempty"`
+	Line    int    `json:"line,omitempty"`
+}
+
 type SaveRequest struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`

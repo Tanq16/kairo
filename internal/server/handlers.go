@@ -227,6 +227,19 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(relPath))
 }
 
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	results, err := s.service.Search(r.URL.Query().Get("q"))
+	if err != nil {
+		writeServiceError(w, "search", err)
+		return
+	}
+	if results == nil {
+		results = []notes.SearchResult{} // always emit a JSON array, never null
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(results)
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok"}`))
