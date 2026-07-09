@@ -223,10 +223,6 @@ func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (
 
 const maxSearchResults = 50
 
-// Search ranks fuzzy filename matches (via fuzzy.Find, already sorted best-first)
-// ahead of substring content matches. Content matching stays plain substring —
-// fuzzy full-text is noisy. Files are enumerated via GetTree, which already
-// excludes dotfiles and .trash.
 func (s *Service) Search(query string) ([]SearchResult, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -266,6 +262,7 @@ func (s *Service) Search(query string) ([]SearchResult, error) {
 		}
 	}
 
+	// content matches stay substring, not fuzzy — fuzzy full-text is noisy
 	q := strings.ToLower(query)
 	for _, f := range files {
 		if matched[f.Path] {
@@ -286,8 +283,6 @@ func (s *Service) Search(query string) ([]SearchResult, error) {
 	return results, nil
 }
 
-// firstMatch returns the first line containing q (lower-cased by the caller),
-// trimmed and rune-capped at 160, with its 1-based line number.
 func firstMatch(content, q string) (string, int, bool) {
 	for i, line := range strings.Split(content, "\n") {
 		if strings.Contains(strings.ToLower(line), q) {
