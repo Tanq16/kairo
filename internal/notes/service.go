@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/sahilm/fuzzy"
 )
 
 type Service struct {
@@ -217,4 +219,79 @@ func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (
 			return "", err
 		}
 	}
+}
+
+const maxSearchResults = 50
+
+func (s *Service) Search(query string) ([]SearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+	root, err := s.storage.GetTree()
+	if err != nil {
+		return nil, err
+	}
+
+	var files []*FileNode
+	var walk func(n *FileNode)
+	walk = func(n *FileNode) {
+		for _, c := range n.Children {
+			if c.IsDir {
+				walk(c)
+			} else if strings.HasSuffix(strings.ToLower(c.Name), ".md") {
+				files = append(files, c)
+			}
+		}
+	}
+	walk(root)
+
+	names := make([]string, len(files))
+	for i, f := range files {
+		names[i] = f.Name
+	}
+
+	matched := make(map[string]bool)
+	var results []SearchResult
+	for _, m := range fuzzy.Find(query, names) {
+		f := files[m.Index]
+		matched[f.Path] = true
+		results = append(results, SearchResult{Path: f.Path, Name: f.Name})
+		if len(results) >= maxSearchResults {
+			return results, nil
+		}
+	}
+
+	// content matches stay substring, not fuzzy — fuzzy full-text is noisy
+	q := strings.ToLower(query)
+	for _, f := range files {
+		if matched[f.Path] {
+			continue
+		}
+		content, err := s.storage.ReadFile(f.Path)
+		if err != nil {
+			continue // a file that vanished mid-walk is not a search failure
+		}
+		if snippet, line, ok := firstMatch(string(content), q); ok {
+			results = append(results, SearchResult{Path: f.Path, Name: f.Name, Snippet: snippet, Line: line})
+			if len(results) >= maxSearchResults {
+				break
+			}
+		}
+	}
+
+	return results, nil
+}
+
+func firstMatch(content, q string) (string, int, bool) {
+	for i, line := range strings.Split(content, "\n") {
+		if strings.Contains(strings.ToLower(line), q) {
+			snippet := strings.TrimSpace(line)
+			if r := []rune(snippet); len(r) > 160 {
+				snippet = string(r[:160]) // rune-cap so a multibyte char is never split
+			}
+			return snippet, i + 1, true
+		}
+	}
+	return "", 0, false
 }
