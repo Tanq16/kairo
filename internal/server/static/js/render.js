@@ -217,14 +217,17 @@ function togglePreview(force = null) {
         fixImagePaths();
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {
+            mermaid.initialize(mermaidConfig);
             mermaid.run({ nodes: els.markdownBody.querySelectorAll('.mermaid') });
         }
         lucide.createIcons();
+        buildToc();
 
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.remove('hidden');
         els.previewBtn.innerHTML = '<i data-lucide="edit" class="w-4 h-4"></i><span>Edit</span>';
     } else {
+        hideToc();
         els.editorContainer.classList.remove('hidden');
         els.previewContainer.classList.add('hidden');
         els.previewBtn.innerHTML = '<i data-lucide="eye" class="w-4 h-4"></i><span>Preview</span>';

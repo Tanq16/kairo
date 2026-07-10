@@ -64,18 +64,19 @@
             display: none;
         }
 
-        /* Print media styles */
+        /* Print keeps the app's dark theme edge-to-edge, not a white page box */
         @media print {
-            body { background: white !important; color: black !important; }
-            #sidebar, .h-14.bg-crust.z-20, #create-modal, #move-modal, #delete-modal, #search-modal, #toast, .copy-code-btn { display: none !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            @page { size: auto; margin: 0; }
+            #sidebar, .h-14.bg-crust.z-20, #create-modal, #move-modal, #delete-modal, #search-modal, #toast, .copy-code-btn, #toc-rail, #editor-container { display: none !important; }
             main { padding: 0 !important; margin: 0 !important; height: auto !important; overflow: visible !important; }
-            #preview-container { display: block !important; position: static !important; overflow: visible !important; padding: 0 !important; }
-            #editor-container { display: none !important; }
-            .markdown-body { color: black !important; background: transparent !important; }
-            .markdown-body code { color: #d90000 !important; background-color: #f1f1f1 !important; }
-            .markdown-body pre { background-color: #f1f1f1 !important; border: 1px solid #ccc !important; }
-            .markdown-body a { color: #0000EE !important; text-decoration: underline !important; }
-            .callout { background-color: #f1f1f1 !important; border-left: 4px solid #333 !important; }
+            body { background: #1e1e2e !important; }
+            #preview-container { display: block !important; position: static !important; overflow: visible !important; padding: 16mm 18mm !important; }
+            .markdown-body h1, .markdown-body h2, .markdown-body h3 { break-after: avoid; page-break-after: avoid; }
+            .markdown-body pre, .markdown-body table, .markdown-body .callout, .markdown-body figure, .markdown-body img, .markdown-body .mermaid { break-inside: avoid; page-break-inside: avoid; max-width: 100%; }
+            .markdown-body pre, .markdown-body code { white-space: pre-wrap; word-break: break-word; }
+            img, table { max-width: 100%; }
+            .markdown-body p, .markdown-body li, .markdown-body blockquote { orphans: 3; widows: 3; }
             * { transition: none !important; }
         }
 
@@ -103,6 +104,38 @@
             border-left-color: #cba6f7;
             background-color: rgba(203, 166, 247, 0.05);
         }
+
+        .toc-rail {
+            position: sticky;
+            top: 0;
+            width: 200px;
+            flex-shrink: 0;
+            align-self: flex-start;
+            max-height: calc(100vh - 4rem);
+            overflow-y: auto;
+        }
+        .toc-rail:empty { display: none; }
+        @media (max-width: 1024px) {
+            .toc-rail { display: none; }
+        }
+        .toc-link {
+            display: block;
+            font-size: 0.8125rem;
+            color: #a6adc8;
+            border-left: 2px solid transparent;
+            border-radius: 0 0.375rem 0.375rem 0;
+            padding: 0.25rem 0.5rem;
+            line-height: 1.4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .toc-link:hover { background-color: #313244; }
+        .toc-h1 { padding-left: 0.5rem; }
+        .toc-h2 { padding-left: 1.25rem; }
+        .toc-h3 { padding-left: 2rem; }
+        /* breathing room for anchored TOC jumps at the scroll-container top */
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 { scroll-margin-top: 1rem; }
 
         /* Markdown rendering */
         .markdown-body {
@@ -389,7 +422,10 @@
 
             <!-- Preview Mode -->
             <div id="preview-container" class="absolute inset-0 z-0 overflow-y-auto custom-scrollbar p-6 md:p-12 pb-32 hidden">
-                 <article id="markdown-body" class="markdown-body max-w-4xl mx-auto"></article>
+                <div class="flex gap-10 justify-center items-start max-w-6xl mx-auto">
+                    <article id="markdown-body" class="markdown-body max-w-4xl flex-1 min-w-0"></article>
+                    <nav id="toc-rail" class="toc-rail no-print"></nav>
+                </div>
             </div>
         </div>
     </main>
