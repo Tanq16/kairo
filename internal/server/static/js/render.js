@@ -194,8 +194,7 @@ function addCopyButtons() {
     lucide.createIcons();
 }
 
-// A table narrower than the pane stretches as before; a wider one scrolls
-// inside its own container instead of overlapping the TOC rail
+// A table wider than the pane scrolls inside its own container instead of overlapping the TOC rail
 function wrapTables() {
     els.markdownBody.querySelectorAll('table').forEach(table => {
         if (table.parentElement.classList.contains('table-scroll')) return;

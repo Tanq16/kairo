@@ -1,8 +1,4 @@
-// Print pagination engine: fills fixed-size page boxes from the rendered
-// preview, splitting blocks that cross a page boundary instead of pushing
-// them wholesale onto the next page. All measurement happens on the live
-// off-screen #print-pages host, so every layout-affecting print rule must
-// apply to .print-page in screen media too (see index.html).
+// Measurement-driven pagination: carve blocks across fixed-size .print-page boxes. Measured on the live DOM, so layout-affecting print CSS lives outside @media print (see index.html).
 
 const KEPT_NOTHING = Symbol('keptNothing');
 const INLINE_TAGS = new Set(['A', 'ABBR', 'B', 'BR', 'CODE', 'DEL', 'EM', 'I', 'IMG', 'INPUT', 'KBD', 'MARK', 'S', 'SMALL', 'SPAN', 'STRONG', 'SUB', 'SUP', 'U']);
@@ -36,8 +32,7 @@ function newPage(ctx) {
 
 const isHeading = el => /^H[1-6]$/.test(el.tagName);
 
-// A heading run stranded at the bottom of a page moves forward with the
-// content it introduces.
+// A heading stranded at a page bottom moves forward with the content it introduces.
 function newPageWithHeadings(ctx) {
     const pulled = [];
     while (ctx.inner.lastElementChild && isHeading(ctx.inner.lastElementChild)) {
@@ -81,8 +76,7 @@ function placeBlock(ctx, block) {
     fitMedia(ctx, block, false);
     if (fits(ctx)) return;
 
-    // Only a real continuation ends placement here; null and KEPT_NOTHING
-    // both leave the block unmutated, so it can be relocated wholesale
+    // null and KEPT_NOTHING leave the block unmutated, so only a real continuation ends placement here
     if (isSplittable(block)) {
         const cont = carve(ctx, block, false);
         if (cont !== KEPT_NOTHING && cont !== null) {
@@ -101,8 +95,7 @@ function placeBlock(ctx, block) {
             return;
         }
     }
-    // Still overflowing with nothing to split off (e.g. an image under a
-    // pulled heading): squeeze media into the space that is actually left
+    // Nothing left to split off (e.g. an image under a pulled heading): squeeze media into the space that remains
     fitMedia(ctx, block, true);
 }
 
@@ -126,11 +119,7 @@ function isSplittable(el) {
     }
 }
 
-// Splits el (last element on the overflowing page) in place: trailing content
-// moves into a returned continuation element. Returns null if nothing needed
-// to move, or KEPT_NOTHING (with el restored) when too little fits to be
-// worth keeping — unless force is set, which guarantees forward progress on
-// a fresh page.
+// Carves trailing overflow into a returned continuation; null = nothing to move, KEPT_NOTHING = too little fits (block restored), unless force guarantees progress on a fresh page.
 function carve(ctx, el, force) {
     switch (el.tagName) {
         case 'P': case 'PRE': return carveText(ctx, el, force);
@@ -198,8 +187,7 @@ function cloneShell(el) {
     return { shell, into: shell };
 }
 
-// Continuation callouts keep the tinted box but drop the icon so they read
-// as a continuation rather than a new callout
+// Continuation callouts keep the tinted box but drop the icon so they read as a continuation, not a new callout
 function calloutShell(el) {
     const shell = el.cloneNode(false);
     const content = el.querySelector(':scope > .callout-content').cloneNode(false);
@@ -223,8 +211,7 @@ function lineHeightOf(el) {
     return Number.isNaN(lh) ? parseFloat(cs.fontSize) * 1.6 : lh;
 }
 
-// Padding/borders of the ancestors that will sit below the kept text (the
-// pre box, a callout shell, ...) — the split point must leave room for them
+// Padding/borders of ancestors below the kept text (pre box, callout shell) — the split must leave room for them
 function belowChrome(ctx, target) {
     let sum = 0, n = target;
     while (n && n !== ctx.inner) {
@@ -258,8 +245,7 @@ function carveText(ctx, el, force) {
     }
     if (lo >= text.length) return null;
 
-    // Break at a newline (code) or word boundary (prose) so the continuation
-    // starts cleanly
+    // Break at a newline (code) or word boundary (prose) so the continuation starts cleanly
     let split = lo;
     if (el.tagName === 'PRE') {
         const nl = text.lastIndexOf('\n', split - 1);
@@ -281,8 +267,7 @@ function carveText(ctx, el, force) {
     range.setEnd(target, target.childNodes.length);
     const frag = range.extractContents();
 
-    // Sub-pixel rounding can leave the kept part a hair too tall; retreat
-    // line by line until the page truly fits
+    // Sub-pixel rounding can leave the kept part a hair too tall; retreat line by line until it fits
     const retreat = t => {
         if (el.tagName === 'PRE') return t.lastIndexOf('\n', t.length - 2) + 1;
         for (let k = Math.max(2, t.length - 50); k > 1; k--) if (/\s/.test(t[k])) return k + 1;
@@ -326,9 +311,7 @@ function carveText(ctx, el, force) {
     return cont;
 }
 
-// Prefer scaling a wide table down whole so no cell has to wrap; when that
-// would shrink below readability, keep natural size and only shrink enough
-// for unbreakable tokens to fit (word wrapping absorbs the rest)
+// Scale a wide table down whole while readable; past that, shrink only enough for unbreakable tokens to fit (wrapping absorbs the rest)
 function fitTableWidth(ctx, table, availW) {
     const probe = table.cloneNode(true);
     probe.style.position = 'absolute';
@@ -343,14 +326,11 @@ function fitTableWidth(ctx, table, availW) {
     if (maxC <= availW) return;
     const fitAll = availW / maxC;
     if (fitAll >= 0.6) table.style.zoom = String(fitAll);
-    // Below the readability cutoff, word wrapping absorbs the excess — but
-    // unbreakable tokens set a hard minimum that must fit the margin exactly
+    // Below the readability cutoff, wrapping absorbs the excess but unbreakable tokens must still fit the margin exactly
     else if (minC > availW) table.style.zoom = String((availW - 1) / minC);
 }
 
-// Mermaid SVGs and images scale (aspect preserved) to fit the page box.
-// With tight set, they fit the space remaining below their current position
-// instead of a full blank page.
+// tight fits media below the current position (block already mid-page) rather than onto a full page
 function fitMedia(ctx, block, tight) {
     const availW = ctx.inner.clientWidth;
     if (block.tagName === 'TABLE' && !tight) fitTableWidth(ctx, block, availW);

@@ -73,11 +73,9 @@
             background: var(--base);
             overflow: hidden;
         }
-        /* Layout-affecting print rules live outside @media print so the
-           pagination engine measures the exact layout that prints */
+        /* Layout-affecting print rules live outside @media print so the engine measures the exact layout that prints */
         .print-page pre, .print-page pre code { white-space: pre-wrap; word-break: break-word; }
-        /* Inline code keeps tokens whole so table zoom accounts for their
-           full width; break-word stays as a layout-time last resort */
+        /* Inline code keeps tokens whole so table zoom accounts for full width; break-word is a layout-time last resort */
         .print-page code { overflow-wrap: break-word; }
         .print-page pre { overflow: hidden; }
         .print-page img { max-width: 100%; height: auto; max-height: 240mm; }
@@ -268,8 +266,7 @@
         .markdown-body .table-scroll { overflow-x: auto; margin-bottom: 1.5rem; }
         .markdown-body .table-scroll > table { margin-bottom: 0; }
 
-        /* Images scale with the preview pane; mermaid SVGs already do
-           (width:100% capped by their inline natural-width max-width) */
+        /* Images scale with the preview pane; mermaid SVGs already do via their inline natural-width max-width */
         #markdown-body img { max-width: 100%; height: auto; }
 
         .markdown-body blockquote {
