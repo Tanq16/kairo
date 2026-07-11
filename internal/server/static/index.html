@@ -75,7 +75,10 @@
         }
         /* Layout-affecting print rules live outside @media print so the
            pagination engine measures the exact layout that prints */
-        .print-page pre, .print-page code { white-space: pre-wrap; word-break: break-word; }
+        .print-page pre, .print-page pre code { white-space: pre-wrap; word-break: break-word; }
+        /* Inline code keeps tokens whole so table zoom accounts for their
+           full width; break-word stays as a layout-time last resort */
+        .print-page code { overflow-wrap: break-word; }
         .print-page pre { overflow: hidden; }
         .print-page img { max-width: 100%; height: auto; max-height: 240mm; }
         .print-page table { max-width: 100%; }
