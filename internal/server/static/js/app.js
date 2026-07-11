@@ -3,6 +3,7 @@ const els = {
     editorContainer: document.getElementById('editor-container'),
     previewContainer: document.getElementById('preview-container'),
     markdownBody: document.getElementById('markdown-body'),
+    tocRail: document.getElementById('toc-rail'),
     fileTree: document.getElementById('file-tree'),
     filenameDisplay: document.getElementById('current-filename'),
     unsavedIndicator: document.getElementById('unsaved-indicator'),
@@ -202,6 +203,7 @@ async function loadFile(path, isDir = false) {
         els.previewContainer.classList.remove('hidden');
         els.previewBtn.classList.add('hidden');
         previewMode = true;
+        hideToc();
         renderDirListing(path);
         return;
     }
@@ -219,6 +221,7 @@ async function loadFile(path, isDir = false) {
         els.previewContainer.classList.remove('hidden');
         els.previewBtn.classList.add('hidden');
         previewMode = true;
+        hideToc();
         els.markdownBody.innerHTML = `<img src="/api/file?path=${encPath(path)}" alt="${escapeHtml(path.split('/').pop())}" style="max-width:100%; border-radius:0.5rem;">`;
         return;
     }
@@ -286,6 +289,52 @@ function renderDirListing(path) {
     els.markdownBody.appendChild(ul);
 }
 
+let tocObserver = null;
+
+function buildToc() {
+    const headings = els.markdownBody.querySelectorAll('h1, h2, h3');
+    if (headings.length < 2) {
+        hideToc();
+        return;
+    }
+    els.tocRail.innerHTML = '';
+    const linkFor = new Map();
+    headings.forEach(h => {
+        const a = document.createElement('a');
+        a.className = 'toc-link toc-h' + h.tagName[1];
+        // Heading text is untrusted note content
+        a.textContent = h.textContent;
+        a.href = '#' + h.id;
+        a.addEventListener('click', e => {
+            // Scroll within the preview pane without pushing a hash onto the URL
+            e.preventDefault();
+            h.scrollIntoView({ block: 'start' });
+        });
+        els.tocRail.appendChild(a);
+        linkFor.set(h, a);
+    });
+
+    tocObserver?.disconnect();
+    const visible = new Set();
+    tocObserver = new IntersectionObserver(entries => {
+        entries.forEach(e => e.isIntersecting ? visible.add(e.target) : visible.delete(e.target));
+        let top = null;
+        for (const h of headings) if (visible.has(h)) { top = h; break; }
+        linkFor.forEach(a => a.classList.remove('active'));
+        if (top) linkFor.get(top).classList.add('active');
+    }, { root: els.previewContainer, rootMargin: '0px 0px -70% 0px' });
+    headings.forEach(h => tocObserver.observe(h));
+
+    els.tocRail.classList.remove('hidden');
+}
+
+function hideToc() {
+    tocObserver?.disconnect();
+    tocObserver = null;
+    els.tocRail.innerHTML = '';
+    els.tocRail.classList.add('hidden');
+}
+
 async function moveItem(oldPath, newPath) {
     if (!oldPath || !newPath || oldPath === newPath) return false;
     if (newPath.startsWith(oldPath + '/')) {
@@ -325,6 +374,10 @@ function initEventListeners() {
     if (els.printBtn) {
         els.printBtn.addEventListener('click', () => {
             if (!previewMode) togglePreview(true);
+            // Browsers seed the Save-as-PDF filename from document.title
+            const originalTitle = document.title;
+            if (currentPath) document.title = currentPath.split('/').pop();
+            window.addEventListener('afterprint', () => { document.title = originalTitle; }, { once: true });
             setTimeout(() => window.print(), 100);
         });
     }
