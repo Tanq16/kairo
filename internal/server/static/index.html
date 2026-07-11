@@ -261,6 +261,14 @@
         .markdown-body table th:last-child, .markdown-body table td:last-child { border-right: none; }
         .markdown-body table tr:last-child td { border-bottom: none !important; }
 
+        /* Wide tables scroll within the content column instead of overlapping the TOC */
+        .markdown-body .table-scroll { overflow-x: auto; margin-bottom: 1.5rem; }
+        .markdown-body .table-scroll > table { margin-bottom: 0; }
+
+        /* Images scale with the preview pane; mermaid SVGs already do
+           (width:100% capped by their inline natural-width max-width) */
+        #markdown-body img { max-width: 100%; height: auto; }
+
         .markdown-body blockquote {
             border-left: 0.25em solid rgba(69, 71, 90, 0.5);
             padding: 0 1em;

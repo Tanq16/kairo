@@ -69,6 +69,8 @@ function contentHeight(page) {
 }
 
 function prepareBlock(src) {
+    // Preview wraps tables in a scroll container; print carves the bare table
+    if (src.classList.contains('table-scroll')) src = src.querySelector('table') || src;
     const block = src.cloneNode(true);
     block.querySelectorAll('.copy-code-btn').forEach(b => b.remove());
     return block;

@@ -285,6 +285,7 @@ async function loadFile(path, isDir = false) {
 
         els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(content));
         fixImagePaths();
+        wrapTables();
 
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {
