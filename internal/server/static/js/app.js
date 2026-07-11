@@ -4,6 +4,8 @@ const els = {
     previewContainer: document.getElementById('preview-container'),
     markdownBody: document.getElementById('markdown-body'),
     tocRail: document.getElementById('toc-rail'),
+    tocToggle: document.getElementById('toc-toggle'),
+    previewGrid: document.querySelector('#preview-container .preview-grid'),
     fileTree: document.getElementById('file-tree'),
     filenameDisplay: document.getElementById('current-filename'),
     unsavedIndicator: document.getElementById('unsaved-indicator'),
@@ -14,6 +16,7 @@ const els = {
     sidebarOverlay: document.getElementById('sidebar-overlay'),
     mobileMenuBtn: document.getElementById('mobile-menu-btn'),
     desktopSidebarToggle: document.getElementById('desktop-sidebar-toggle'),
+    sidebarResizer: document.getElementById('sidebar-resizer'),
     addFileBtn: document.getElementById('add-file-btn'),
     addFolderBtn: document.getElementById('add-folder-btn'),
     moveBtn: document.getElementById('move-btn'),
@@ -48,6 +51,7 @@ let currentPath = null;
 let unsaved = false;
 let previewMode = false;
 let sidebarCollapsed = localStorage.getItem('kairo-sidebar-collapsed') === 'true';
+let tocVisible = localStorage.getItem('kairo-toc-visible') !== 'false';
 let loadVersion = 0;
 let treeData = [];
 let createMode = 'file';
@@ -103,6 +107,36 @@ function applySidebarCollapsed() {
     els.desktopSidebarToggle.classList.toggle('sidebar-collapsed', sidebarCollapsed);
 }
 
+const SIDEBAR_MIN = 224, SIDEBAR_MAX = 560;
+function initSidebarResize() {
+    const saved = parseInt(localStorage.getItem('kairo-sidebar-width'), 10);
+    if (saved) els.sidebar.style.setProperty('--sidebar-width', Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, saved)) + 'px');
+    if (!els.sidebarResizer) return;
+    let startX, startW, curW;
+    const onMove = e => {
+        curW = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW + e.clientX - startX));
+        els.sidebar.style.setProperty('--sidebar-width', curW + 'px');
+    };
+    const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        els.sidebar.classList.remove('resizing');
+        document.body.style.userSelect = '';
+        if (curW) localStorage.setItem('kairo-sidebar-width', String(Math.round(curW)));
+    };
+    els.sidebarResizer.addEventListener('mousedown', e => {
+        if (sidebarCollapsed) return;
+        e.preventDefault();
+        startX = e.clientX;
+        startW = els.sidebar.getBoundingClientRect().width;
+        curW = startW;
+        els.sidebar.classList.add('resizing');
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+}
+
 function updateBreadcrumbs(path) {
     const container = els.filenameDisplay;
     container.innerHTML = '';
@@ -144,6 +178,7 @@ function goHome() {
     els.previewBtn.classList.add('hidden');
     els.editorContainer.classList.add('hidden');
     els.previewContainer.classList.add('hidden');
+    hideToc();
     refreshTree();
 }
 
@@ -153,6 +188,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initEditor();
     initUploadHandlers();
     initEventListeners();
+    initSidebarResize();
     initSearch();
     await refreshTree();
 
@@ -289,10 +325,11 @@ function renderDirListing(path) {
     els.markdownBody.appendChild(ul);
 }
 
-let tocObserver = null;
+let tocScrollHandler = null;
+let tocScrollTarget = null;
 
 function buildToc() {
-    const headings = els.markdownBody.querySelectorAll('h1, h2, h3');
+    const headings = [...els.markdownBody.querySelectorAll('h1, h2, h3')];
     if (headings.length < 2) {
         hideToc();
         return;
@@ -314,25 +351,106 @@ function buildToc() {
         linkFor.set(h, a);
     });
 
-    tocObserver?.disconnect();
-    const visible = new Set();
-    tocObserver = new IntersectionObserver(entries => {
-        entries.forEach(e => e.isIntersecting ? visible.add(e.target) : visible.delete(e.target));
-        let top = null;
-        for (const h of headings) if (visible.has(h)) { top = h; break; }
-        linkFor.forEach(a => a.classList.remove('active'));
-        if (top) linkFor.get(top).classList.add('active');
-    }, { root: els.previewContainer, rootMargin: '0px 0px -70% 0px' });
-    headings.forEach(h => tocObserver.observe(h));
+    const setActive = () => {
+        const top = els.previewContainer.getBoundingClientRect().top;
+        // Active = the last heading scrolled above the marker, so a section stays lit once its heading passes off the top
+        let current = headings[0];
+        for (const h of headings) {
+            if (h.getBoundingClientRect().top - top <= 96) current = h;
+            else break;
+        }
+        let active = null;
+        linkFor.forEach((a, h) => { a.classList.toggle('active', h === current); if (h === current) active = a; });
+        if (active && !els.tocRail.classList.contains('hidden')) keepTocLinkInView(active);
+    };
 
-    els.tocRail.classList.remove('hidden');
+    tocScrollTarget?.removeEventListener('scroll', tocScrollHandler);
+    let ticking = false;
+    tocScrollHandler = () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => { setActive(); ticking = false; });
+    };
+    tocScrollTarget = els.previewContainer;
+    tocScrollTarget.addEventListener('scroll', tocScrollHandler, { passive: true });
+    setActive();
+
+    els.tocToggle?.classList.remove('hidden');
+    applyTocVisible();
+}
+
+function keepTocLinkInView(link) {
+    const lr = link.getBoundingClientRect(), rr = els.tocRail.getBoundingClientRect();
+    if (lr.top < rr.top) els.tocRail.scrollTop -= rr.top - lr.top + 8;
+    else if (lr.bottom > rr.bottom) els.tocRail.scrollTop += lr.bottom - rr.bottom + 8;
 }
 
 function hideToc() {
-    tocObserver?.disconnect();
-    tocObserver = null;
+    tocScrollTarget?.removeEventListener('scroll', tocScrollHandler);
+    tocScrollHandler = null;
+    tocScrollTarget = null;
     els.tocRail.innerHTML = '';
     els.tocRail.classList.add('hidden');
+    els.previewGrid?.classList.add('toc-hidden');
+    els.tocToggle?.classList.add('hidden');
+}
+
+function applyTocVisible() {
+    const show = els.tocRail.children.length > 0 && tocVisible;
+    els.tocRail.classList.toggle('hidden', !show);
+    els.previewGrid?.classList.toggle('toc-hidden', !show);
+    els.tocToggle?.classList.toggle('active', show);
+    if (show) tocScrollHandler?.();
+}
+
+const NARROW_WIDTH = 1200;
+function autoHintSidePanels(opened) {
+    if (window.innerWidth >= NARROW_WIDTH) return;
+    if (opened === 'nav' && tocVisible) {
+        tocVisible = false;
+        localStorage.setItem('kairo-toc-visible', 'false');
+        applyTocVisible();
+    } else if (opened === 'toc' && !sidebarCollapsed) {
+        sidebarCollapsed = true;
+        localStorage.setItem('kairo-sidebar-collapsed', 'true');
+        applySidebarCollapsed();
+    }
+}
+
+function clearPrintPages() {
+    document.getElementById('print-pages')?.remove();
+}
+
+// Padded page boxes give each print page its own breathing room without a white @page margin
+function buildPrintPages() {
+    clearPrintPages();
+    const host = document.createElement('div');
+    host.id = 'print-pages';
+    let page, inner;
+    const addPage = () => {
+        page = document.createElement('div');
+        page.className = 'print-page';
+        inner = document.createElement('div');
+        inner.className = 'markdown-body';
+        page.appendChild(inner);
+        host.appendChild(page);
+    };
+    document.body.appendChild(host);
+    addPage();
+    for (const block of [...els.markdownBody.children]) {
+        inner.appendChild(block.cloneNode(true));
+        if (page.scrollHeight <= page.clientHeight) continue;
+        if (inner.children.length === 1) {
+            page.style.height = 'auto';
+            addPage();
+        } else {
+            const overflowed = inner.lastElementChild;
+            inner.removeChild(overflowed);
+            addPage();
+            inner.appendChild(overflowed);
+        }
+    }
+    return host;
 }
 
 async function moveItem(oldPath, newPath) {
@@ -377,7 +495,11 @@ function initEventListeners() {
             // Browsers seed the Save-as-PDF filename from document.title
             const originalTitle = document.title;
             if (currentPath) document.title = currentPath.split('/').pop();
-            window.addEventListener('afterprint', () => { document.title = originalTitle; }, { once: true });
+            buildPrintPages();
+            window.addEventListener('afterprint', () => {
+                document.title = originalTitle;
+                clearPrintPages();
+            }, { once: true });
             setTimeout(() => window.print(), 100);
         });
     }
@@ -394,11 +516,24 @@ function initEventListeners() {
     document.getElementById('kairo-home')?.addEventListener('click', goHome);
     document.getElementById('kairo-home-mobile')?.addEventListener('click', goHome);
 
+    if (window.innerWidth < NARROW_WIDTH && !sidebarCollapsed && tocVisible) {
+        tocVisible = false;
+        localStorage.setItem('kairo-toc-visible', 'false');
+    }
+
     applySidebarCollapsed();
     els.desktopSidebarToggle.addEventListener('click', () => {
         sidebarCollapsed = !sidebarCollapsed;
         applySidebarCollapsed();
         localStorage.setItem('kairo-sidebar-collapsed', String(sidebarCollapsed));
+        if (!sidebarCollapsed) autoHintSidePanels('nav');
+    });
+
+    els.tocToggle?.addEventListener('click', () => {
+        tocVisible = !tocVisible;
+        localStorage.setItem('kairo-toc-visible', String(tocVisible));
+        applyTocVisible();
+        if (tocVisible) autoHintSidePanels('toc');
     });
 
     if(els.addFileBtn) {

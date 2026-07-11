@@ -64,29 +64,34 @@
             display: none;
         }
 
-        /* Print keeps the app's dark theme edge-to-edge, not a white page box */
+        #print-pages { position: fixed; left: -10000px; top: 0; }
+        .print-page {
+            width: 216mm;
+            height: 279mm;
+            box-sizing: border-box;
+            padding: 14mm 16mm;
+            background: var(--base);
+            overflow: hidden;
+        }
         @media print {
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            @page { size: auto; margin: 0; }
-            #sidebar, .h-14.bg-crust.z-20, #create-modal, #move-modal, #delete-modal, #search-modal, #toast, .copy-code-btn, #toc-rail, #editor-container { display: none !important; }
-            main { padding: 0 !important; margin: 0 !important; height: auto !important; overflow: visible !important; }
-            /* Ancestors are fixed-height + overflow-hidden on screen; left un-reset they clip printing to page 1 */
-            html, body, main > div { height: auto !important; overflow: visible !important; }
-            body { background: #1e1e2e !important; }
-            #preview-container { display: block !important; position: static !important; overflow: visible !important; padding: 16mm 18mm !important; }
-            .markdown-body h1, .markdown-body h2, .markdown-body h3 { break-after: avoid; page-break-after: avoid; }
-            .markdown-body pre, .markdown-body table, .markdown-body .callout, .markdown-body figure, .markdown-body img, .markdown-body .mermaid { break-inside: avoid; page-break-inside: avoid; max-width: 100%; }
-            .markdown-body pre, .markdown-body code { white-space: pre-wrap; word-break: break-word; }
-            img, table { max-width: 100%; }
-            .markdown-body p, .markdown-body li, .markdown-body blockquote { orphans: 3; widows: 3; }
-            * { transition: none !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transition: none !important; }
+            @page { size: letter; margin: 0; }
+            body > *:not(#print-pages) { display: none !important; }
+            #print-pages { position: static; left: auto; }
+            .print-page { break-after: page; page-break-after: always; }
+            .print-page:last-child { break-after: auto; page-break-after: auto; }
+            .print-page .copy-code-btn { display: none !important; }
+            .print-page pre, .print-page code { white-space: pre-wrap; word-break: break-word; }
+            .print-page img, .print-page table { max-width: 100%; }
         }
 
         /* Sidebar transitions */
-        #sidebar { 
+        #sidebar {
+            width: var(--sidebar-width, 21rem);
             transition: transform 0.2s ease-in-out, width 0.2s ease-in-out, margin-left 0.2s ease-in-out;
         }
-        
+        #sidebar.resizing { transition: none; }
+
         /* Desktop sidebar collapsed state */
         @media (min-width: 768px) {
             #sidebar.collapsed {
@@ -100,42 +105,60 @@
             transform: scaleX(-1);
         }
 
-        /* TOC Active Link */
-        .toc-link.active {
-            color: #cba6f7;
-            border-left-color: #cba6f7;
-            background-color: rgba(203, 166, 247, 0.05);
+        .preview-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            column-gap: 3.5rem;
+            align-items: start;
+        }
+        .preview-grid.toc-hidden {
+            grid-template-columns: minmax(0, 1fr);
+            column-gap: 0;
+        }
+        #markdown-body {
+            width: 100%;
+            max-width: 52rem;
+            margin-inline: auto;
         }
 
         .toc-rail {
             position: sticky;
             top: 0;
-            width: 200px;
-            flex-shrink: 0;
-            align-self: flex-start;
+            width: 13rem;
+            align-self: start;
             max-height: calc(100vh - 4rem);
             overflow-y: auto;
-        }
-        .toc-rail:empty { display: none; }
-        @media (max-width: 1024px) {
-            .toc-rail { display: none; }
+            padding-bottom: 1rem;
         }
         .toc-link {
             display: block;
             font-size: 0.8125rem;
-            color: #a6adc8;
+            color: var(--subtext0);
             border-left: 2px solid transparent;
             border-radius: 0 0.375rem 0.375rem 0;
-            padding: 0.25rem 0.5rem;
+            padding: 0.25rem 0.75rem;
             line-height: 1.4;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .toc-link:hover { background-color: #313244; }
-        .toc-h1 { padding-left: 0.5rem; }
-        .toc-h2 { padding-left: 1.25rem; }
-        .toc-h3 { padding-left: 2rem; }
+        .toc-link:hover { background-color: var(--surface0); color: var(--text); }
+        .toc-link.active {
+            color: var(--mauve);
+            border-left-color: var(--mauve);
+            background-color: var(--surface0);
+        }
+        .toc-h1 { padding-left: 0.75rem; }
+        .toc-h2 { padding-left: 1.5rem; }
+        .toc-h3 { padding-left: 2.25rem; }
+        #toc-toggle.active {
+            color: var(--mauve);
+            background-color: var(--surface0);
+        }
+        @media (max-width: 767px) {
+            .toc-rail, #toc-toggle { display: none !important; }
+            .preview-grid { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
+        }
         /* breathing room for anchored TOC jumps at the scroll-container top */
         .markdown-body h1, .markdown-body h2, .markdown-body h3 { scroll-margin-top: 1rem; }
 
@@ -179,7 +202,7 @@
             border-radius: 0.75rem;
             padding: 1rem !important;
             margin-bottom: 16px;
-            overflow: auto;
+            overflow-x: auto;
         }
 
         .markdown-body code {
@@ -195,7 +218,7 @@
             background-color: transparent !important;
             padding: 0;
             font-size: 0.9375em;
-            line-height: 1;
+            line-height: 1.5;
         }
 
         .markdown-body ul, .markdown-body ol {
@@ -375,7 +398,7 @@
     </div>
     
     <!-- Sidebar -->
-    <aside id="sidebar" class="w-[21rem] bg-crust flex flex-col fixed md:relative h-full z-40 transform -translate-x-full md:translate-x-0 shrink-0 transition-all duration-200 md:overflow-visible overflow-hidden border-r border-surface0">
+    <aside id="sidebar" class="bg-crust flex flex-col fixed md:relative h-full z-40 transform -translate-x-full md:translate-x-0 shrink-0 transition-all duration-200 md:overflow-visible overflow-hidden border-r border-surface0">
         <div class="h-14 flex items-center justify-between px-4 shrink-0">
             <span class="font-bold text-mauve hidden md:block cursor-pointer" id="kairo-home">Kairō</span>
             <div class="flex items-center gap-2">
@@ -385,6 +408,7 @@
             </div>
         </div>
         <div id="file-tree" class="flex-1 overflow-y-auto p-2 custom-scrollbar drop-zone"></div>
+        <div id="sidebar-resizer" class="hidden md:block absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-mauve/40 z-50" title="Drag to resize"></div>
     </aside>
 
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
@@ -403,6 +427,9 @@
             <div class="flex items-center gap-3">
                 <button id="search-btn" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors" title="Search (Ctrl/Cmd+K)">
                     <i data-lucide="search" class="w-4 h-4"></i>
+                </button>
+                <button id="toc-toggle" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors hidden" title="Toggle contents">
+                    <i data-lucide="list" class="w-4 h-4"></i>
                 </button>
                 <button id="print-btn" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors hidden" title="Print Document">
                     <i data-lucide="printer" class="w-4 h-4"></i>
@@ -424,9 +451,9 @@
 
             <!-- Preview Mode -->
             <div id="preview-container" class="absolute inset-0 z-0 overflow-y-auto custom-scrollbar p-6 md:p-12 pb-32 hidden">
-                <div class="flex gap-10 justify-center items-start max-w-6xl mx-auto">
-                    <article id="markdown-body" class="markdown-body max-w-4xl flex-1 min-w-0"></article>
-                    <nav id="toc-rail" class="toc-rail no-print"></nav>
+                <div class="preview-grid">
+                    <article id="markdown-body" class="markdown-body"></article>
+                    <nav id="toc-rail" class="toc-rail no-print hidden"></nav>
                 </div>
             </div>
         </div>
