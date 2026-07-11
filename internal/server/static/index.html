@@ -73,6 +73,15 @@
             background: var(--base);
             overflow: hidden;
         }
+        /* Layout-affecting print rules live outside @media print so the
+           pagination engine measures the exact layout that prints */
+        .print-page pre, .print-page code { white-space: pre-wrap; word-break: break-word; }
+        .print-page pre { overflow: hidden; }
+        .print-page img { max-width: 100%; height: auto; max-height: 240mm; }
+        .print-page table { max-width: 100%; }
+        .print-page th, .print-page td { overflow-wrap: break-word; }
+        .print-page .overflow-x-auto, .print-page .mermaid { overflow: visible; }
+        .print-page .copy-code-btn { display: none !important; }
         @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transition: none !important; }
             @page { size: letter; margin: 0; }
@@ -80,9 +89,6 @@
             #print-pages { position: static; left: auto; }
             .print-page { break-after: page; page-break-after: always; }
             .print-page:last-child { break-after: auto; page-break-after: auto; }
-            .print-page .copy-code-btn { display: none !important; }
-            .print-page pre, .print-page code { white-space: pre-wrap; word-break: break-word; }
-            .print-page img, .print-page table { max-width: 100%; }
         }
 
         /* Sidebar transitions */
@@ -533,6 +539,7 @@
     </div>
 
     <script src="/static/js/render.js"></script>
+    <script src="/static/js/print.js"></script>
     <script src="/static/js/editor.js"></script>
     <script src="/static/js/app.js"></script>
     <script>
