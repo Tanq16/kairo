@@ -285,6 +285,7 @@ async function loadFile(path, isDir = false) {
 
         els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(content));
         fixImagePaths();
+        wrapTables();
 
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {
@@ -415,42 +416,6 @@ function autoHintSidePanels(opened) {
         localStorage.setItem('kairo-sidebar-collapsed', 'true');
         applySidebarCollapsed();
     }
-}
-
-function clearPrintPages() {
-    document.getElementById('print-pages')?.remove();
-}
-
-// Padded page boxes give each print page its own breathing room without a white @page margin
-function buildPrintPages() {
-    clearPrintPages();
-    const host = document.createElement('div');
-    host.id = 'print-pages';
-    let page, inner;
-    const addPage = () => {
-        page = document.createElement('div');
-        page.className = 'print-page';
-        inner = document.createElement('div');
-        inner.className = 'markdown-body';
-        page.appendChild(inner);
-        host.appendChild(page);
-    };
-    document.body.appendChild(host);
-    addPage();
-    for (const block of [...els.markdownBody.children]) {
-        inner.appendChild(block.cloneNode(true));
-        if (page.scrollHeight <= page.clientHeight) continue;
-        if (inner.children.length === 1) {
-            page.style.height = 'auto';
-            addPage();
-        } else {
-            const overflowed = inner.lastElementChild;
-            inner.removeChild(overflowed);
-            addPage();
-            inner.appendChild(overflowed);
-        }
-    }
-    return host;
 }
 
 async function moveItem(oldPath, newPath) {

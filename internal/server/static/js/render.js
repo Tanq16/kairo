@@ -194,6 +194,17 @@ function addCopyButtons() {
     lucide.createIcons();
 }
 
+// A table wider than the pane scrolls inside its own container instead of overlapping the TOC rail
+function wrapTables() {
+    els.markdownBody.querySelectorAll('table').forEach(table => {
+        if (table.parentElement.classList.contains('table-scroll')) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'table-scroll';
+        table.parentNode.insertBefore(wrap, table);
+        wrap.appendChild(table);
+    });
+}
+
 function fixImagePaths() {
     els.markdownBody.querySelectorAll('img').forEach(img => {
         let src = img.getAttribute('src');
@@ -215,6 +226,7 @@ function togglePreview(force = null) {
         const code = view.state.doc.toString();
         els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(code));
         fixImagePaths();
+        wrapTables();
         addCopyButtons();
         if (typeof mermaid !== 'undefined') {
             mermaid.initialize(mermaidConfig);
