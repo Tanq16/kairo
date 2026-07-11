@@ -70,6 +70,8 @@
             @page { size: auto; margin: 0; }
             #sidebar, .h-14.bg-crust.z-20, #create-modal, #move-modal, #delete-modal, #search-modal, #toast, .copy-code-btn, #toc-rail, #editor-container { display: none !important; }
             main { padding: 0 !important; margin: 0 !important; height: auto !important; overflow: visible !important; }
+            /* Ancestors are fixed-height + overflow-hidden on screen; left un-reset they clip printing to page 1 */
+            html, body, main > div { height: auto !important; overflow: visible !important; }
             body { background: #1e1e2e !important; }
             #preview-container { display: block !important; position: static !important; overflow: visible !important; padding: 16mm 18mm !important; }
             .markdown-body h1, .markdown-body h2, .markdown-body h3 { break-after: avoid; page-break-after: avoid; }
