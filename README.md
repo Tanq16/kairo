@@ -15,14 +15,17 @@ A simple note-taking application with Markdown support, built in Go.
 
 - **Markdown Editing**: Write and edit Markdown notes with syntax highlighting using CodeMirror 6
 - **Live Preview**: Toggle between edit and preview modes with real-time rendering (preview by default)
+- **Full-Text Search**: Instantly find notes by name or content with a keyboard-driven palette (Ctrl/Cmd+K)
+- **Table of Contents**: Auto-generated contents pane that tracks the section you're reading as you scroll
 - **File Management**: Create, delete, move, and rename files and folders with automatic attachment handling
 - **Image Support**: Paste or drag-and-drop images directly into notes, with inline preview for image files
 - **Mermaid Diagrams**: Render Mermaid diagrams in your notes
 - **Callout Blocks**: Support for styled callouts (TIP, NOTE, INFO, WARNING, DANGER)
 - **Code Highlighting**: Syntax highlighting for code blocks with copy-to-clipboard functionality
+- **PDF Export**: Print or export notes as clean, paginated PDFs — not the browser's default output
 - **Dark Theme**: Beautiful Catppuccin Mocha theme (dark mode only)
 - **Lucide Icons**: Modern icon set throughout the interface
-- **Responsive Design**: Works on both desktop and mobile devices
+- **Responsive Design**: Works on both desktop and mobile devices, with a resizable sidebar on desktop
 - **Self-Contained**: Single Go binary with embedded frontend assets
 
 ## Screenshots
@@ -30,7 +33,23 @@ A simple note-taking application with Markdown support, built in Go.
 <details>
 <summary>Click to expand screenshots</summary>
 
-*Screenshots coming soon*
+![Main interface](.github/assets/screenshots/hero.png)
+*The main interface — file tree, rendered Markdown, and the live Table of Contents*
+
+![Markdown editor](.github/assets/screenshots/editor.png)
+*CodeMirror 6 editor with Markdown syntax highlighting*
+
+![Mermaid diagrams](.github/assets/screenshots/mermaid.png)
+*Mermaid diagrams render inline, themed to match*
+
+![Callout blocks](.github/assets/screenshots/callouts.png)
+*Styled callout blocks: tip, note, info, warning, and danger*
+
+![Code highlighting](.github/assets/screenshots/code.png)
+*Syntax-highlighted code blocks with one-click copy*
+
+![Full-text search](.github/assets/screenshots/search.png)
+*Full-text search across every note (Ctrl/Cmd+K)*
 
 </details>
 
@@ -77,4 +96,7 @@ Once the server is running, open your browser and navigate to the displayed URL 
 - Mermaid diagrams are rendered automatically when you use ` ```mermaid ` code blocks
 - Callout blocks use the format: `> [!TIP]` or `> [!NOTE]` etc.
 - Files are auto-saved as you type - look for the save indicator in the toolbar
-- The sidebar can be toggled on desktop and mobile for a cleaner editing experience
+- Press `Ctrl/Cmd+K` to search all notes by name or content; `Esc` closes the search
+- Toggle the Table of Contents with the list icon in the toolbar - the active section follows your scroll position
+- The sidebar can be toggled on desktop and mobile, and resized by dragging its right edge on desktop
+- Use **Print Document** in the toolbar for a clean, paginated PDF export without browser headers or footers
