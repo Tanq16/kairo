@@ -343,7 +343,9 @@ function fitTableWidth(ctx, table, availW) {
     if (maxC <= availW) return;
     const fitAll = availW / maxC;
     if (fitAll >= 0.6) table.style.zoom = String(fitAll);
-    else if (minC > availW) table.style.zoom = String(Math.max(0.6, availW / minC));
+    // Below the readability cutoff, word wrapping absorbs the excess — but
+    // unbreakable tokens set a hard minimum that must fit the margin exactly
+    else if (minC > availW) table.style.zoom = String((availW - 1) / minC);
 }
 
 // Mermaid SVGs and images scale (aspect preserved) to fit the page box.
