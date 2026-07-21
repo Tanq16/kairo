@@ -244,18 +244,24 @@ function fixImagePaths() {
     });
 }
 
+// The single preview-render pipeline: sanitize+parse the markdown, then run every
+// post-processor in order. Initial load, manual toggle, and live sync all go through
+// here so a new render step is added once, never drifting across copies.
+function renderMarkdownBody(content) {
+    els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(content));
+    fixImagePaths();
+    wrapTables();
+    addCopyButtons();
+    queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
+    lucide.createIcons();
+    buildToc();
+}
+
 function togglePreview(force = null) {
     previewMode = force !== null ? force : !previewMode;
 
     if (previewMode) {
-        const code = view.state.doc.toString();
-        els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(code));
-        fixImagePaths();
-        wrapTables();
-        addCopyButtons();
-        queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
-        lucide.createIcons();
-        buildToc();
+        renderMarkdownBody(view.state.doc.toString());
 
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.remove('hidden');

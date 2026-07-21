@@ -67,6 +67,19 @@ let treeData = [];
 let createMode = 'file';
 let expandedFolders = new Set(JSON.parse(localStorage.getItem('kairo-expanded-folders') || '[]'));
 
+// sha256 token of the open note, used by sync.js to skip an update it already holds
+let currentFileToken = null;
+// Per-tab id echoed back on this tab's own change events so sync.js can ignore them.
+// crypto.randomUUID is secure-context-only (undefined over plain-HTTP LAN), so fall back.
+const KAIRO_CLIENT = (() => {
+    if (crypto.randomUUID) { try { return crypto.randomUUID(); } catch (e) {} }
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = [...b].map(x => x.toString(16).padStart(2, '0'));
+    return `${h[0]}${h[1]}${h[2]}${h[3]}-${h[4]}${h[5]}-${h[6]}${h[7]}-${h[8]}${h[9]}-${h.slice(10).join('')}`;
+})();
+
 function encPath(path) {
     if (!path) return '';
     const bytes = new TextEncoder().encode(path);
@@ -332,6 +345,7 @@ async function loadFile(path, isDir = false) {
         const res = await fetch(`/api/file?path=${encPath(path)}`);
         if (thisLoad !== loadVersion) return;
         if (!res.ok) throw new Error('Failed to load');
+        currentFileToken = res.headers.get('X-Kairo-Version');
         const content = await res.text();
         if (thisLoad !== loadVersion) return;
 
@@ -348,13 +362,6 @@ async function loadFile(path, isDir = false) {
         els.previewBtn.classList.remove('hidden');
         // Keep the badge if the outgoing file still has a queued or failed save
         updateUnsavedIndicator();
-
-        els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(content));
-        fixImagePaths();
-        wrapTables();
-
-        addCopyButtons();
-        lucide.createIcons();
 
         togglePreview(true);
     } catch(e) {
@@ -491,7 +498,7 @@ async function moveItem(oldPath, newPath) {
     try {
         const res = await fetch('/api/move', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
             body: JSON.stringify({ path: encPath(oldPath), newPath: encPath(newPath) })
         });
         if (!res.ok) {
@@ -595,7 +602,7 @@ function initEventListeners() {
             if (createMode === 'folder') {
                 const res = await fetch('/api/create-dir', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
                     body: JSON.stringify({ path: encPath(path) })
                 });
                 if (!res.ok) throw new Error('create failed: ' + res.status);
@@ -605,7 +612,7 @@ function initEventListeners() {
                 if(!path.endsWith('.md')) path += '.md';
                 const res = await fetch('/api/create-file', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
                     body: JSON.stringify({ path: encPath(path), content: '# ' + val.replace(/\.md$/, '') })
                 });
                 if (!res.ok) throw new Error('create failed: ' + res.status);
@@ -681,7 +688,7 @@ function initEventListeners() {
         try {
             const res = await fetch('/api/delete', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
                 body: JSON.stringify({ path: encPath(currentPath) })
             });
             if (!res.ok) throw new Error('delete failed: ' + res.status);

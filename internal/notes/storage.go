@@ -108,10 +108,37 @@ func (s *FileStorage) SaveFile(path string, content []byte) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+	dir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(fullPath, content, 0644)
+	// Write a same-dir temp then rename over the target: concurrent saves can't tear the
+	// file, readers never see a half-written note, and a dot-prefixed crash leftover stays
+	// out of GetTree (which skips dotfiles).
+	tmp, err := os.CreateTemp(dir, ".kairo-save-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(content); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Chmod(0644); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, fullPath); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func (s *FileStorage) CreateDir(path string) error {

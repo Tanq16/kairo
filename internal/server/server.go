@@ -28,12 +28,16 @@ type Server struct {
 	config  Config
 	mux     *http.ServeMux
 	service *notes.Service
+	hub     *hub
+	tokens  *tokenTable
 }
 
 func New(cfg Config) *Server {
 	return &Server{
 		config: cfg,
 		mux:    http.NewServeMux(),
+		hub:    newHub(),
+		tokens: newTokenTable(),
 	}
 }
 
@@ -43,6 +47,7 @@ func (s *Server) Setup() error {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	s.service = notes.NewService(storage)
+	s.hub.wg.Go(s.hub.run)
 
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -62,6 +67,7 @@ func (s *Server) Setup() error {
 	apiMux.HandleFunc("POST /api/delete", s.handleDelete)
 	apiMux.HandleFunc("POST /api/move", s.handleMove)
 	apiMux.HandleFunc("POST /api/upload", s.handleUpload)
+	apiMux.HandleFunc("GET /api/events", s.handleEvents)
 	apiMux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.Handle("/api/", apiMux)
 
@@ -97,6 +103,9 @@ func (s *Server) Run() error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		log.Printf("INFO Shutting down")
+		// close the SSE streams first: a live stream never idles, so it would otherwise
+		// pin srv.Shutdown until its full timeout
+		s.hub.shutdown()
 		return srv.Shutdown(shutdownCtx)
 	}
 }

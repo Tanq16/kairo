@@ -28,6 +28,16 @@ func writeServiceError(w http.ResponseWriter, action string, err error) {
 	}
 }
 
+// clientID identifies the writing tab so its own SSE echo can be suppressed. The POST
+// path carries it as a header; the beforeunload sendBeacon (which cannot set headers)
+// carries it as a query parameter.
+func clientID(r *http.Request) string {
+	if id := r.Header.Get("X-Kairo-Client"); id != "" {
+		return id
+	}
+	return r.URL.Query().Get("client")
+}
+
 func decodeBase64Path(encoded string) (string, error) {
 	if encoded == "" {
 		return "", nil
@@ -75,6 +85,7 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	if mimeType != "" {
 		w.Header().Set("Content-Type", mimeType)
 	}
+	w.Header().Set("X-Kairo-Version", contentToken(content))
 
 	w.Write(content)
 }
@@ -97,6 +108,11 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// only announce a save that actually changed bytes, so viewers don't churn on no-op autosaves
+	token := contentToken([]byte(req.Content))
+	if s.tokens.changed(decodedPath, token) {
+		s.hub.emit(Event{Op: "save", Path: decodedPath, Token: token, Origin: clientID(r)})
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -120,6 +136,9 @@ func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	token := contentToken([]byte(req.Content))
+	s.tokens.set(finalPath, token)
+	s.hub.emit(Event{Op: "create", Path: finalPath, Token: token, Origin: clientID(r)})
 	w.Write([]byte(finalPath))
 }
 
@@ -141,6 +160,7 @@ func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.hub.emit(Event{Op: "createDir", Path: decodedPath, Origin: clientID(r)})
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -162,6 +182,8 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.tokens.drop(decodedPath)
+	s.hub.emit(Event{Op: "delete", Path: decodedPath, Origin: clientID(r)})
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -189,6 +211,10 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// drop, don't migrate: Move rewrites in-note attachment links, so the old token no
+	// longer matches disk and keeping it could wrongly suppress the next save's emit
+	s.tokens.drop(decodedOldPath)
+	s.hub.emit(Event{Op: "move", Path: decodedOldPath, NewPath: decodedNewPath, Origin: clientID(r)})
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -224,6 +250,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.hub.emit(Event{Op: "upload", Path: decodedNotePath, Origin: clientID(r)})
 	w.Write([]byte(relPath))
 }
 
