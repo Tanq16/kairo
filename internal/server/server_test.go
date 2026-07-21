@@ -311,19 +311,15 @@ func TestHubConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 
 	for i := range workers {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 100 {
 				h.emit(Event{Op: "update", Path: fmt.Sprintf("p-%d", i)})
 			}
-		}(i)
+		})
 	}
 
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				c := &client{send: make(chan Event, 4)}
 				select {
@@ -343,7 +339,7 @@ func TestHubConcurrent(t *testing.T) {
 				}
 				<-drained
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
