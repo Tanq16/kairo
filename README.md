@@ -22,8 +22,8 @@ A simple note-taking application with Markdown support, built in Go.
 - **Mermaid Diagrams**: Render Mermaid diagrams in your notes
 - **Callout Blocks**: Support for styled callouts (TIP, NOTE, INFO, WARNING, DANGER)
 - **Code Highlighting**: Syntax highlighting for code blocks with copy-to-clipboard functionality
-- **PDF Export**: Print or export notes as clean, paginated PDFs — not the browser's default output
-- **Dark Theme**: Beautiful Catppuccin Mocha theme (dark mode only)
+- **PDF Export**: Print or export notes as clean, paginated PDFs (not the browser's default), with styled or plain black-and-white output and adjustable scale
+- **Light & Dark Themes**: Catppuccin Latte (light) and Mocha (dark), toggled from the toolbar and remembered between visits
 - **Lucide Icons**: Modern icon set throughout the interface
 - **Responsive Design**: Works on both desktop and mobile devices, with a resizable sidebar on desktop
 - **Self-Contained**: Single Go binary with embedded frontend assets
@@ -99,4 +99,5 @@ Once the server is running, open your browser and navigate to the displayed URL 
 - Press `Ctrl/Cmd+K` to search all notes by name or content; `Esc` closes the search
 - Toggle the Table of Contents with the list icon in the toolbar - the active section follows your scroll position
 - The sidebar can be toggled on desktop and mobile, and resized by dragging its right edge on desktop
-- Use **Print Document** in the toolbar for a clean, paginated PDF export without browser headers or footers
+- Switch between light (Latte) and dark (Mocha) themes with the theme toggle in the toolbar - the app opens in dark mode and remembers your choice
+- Use the printer icon in the toolbar to export a PDF - pick **Styled** or **Plain** (black & white) output at 100% or a custom scale, without browser headers or footers
