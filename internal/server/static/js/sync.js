@@ -44,6 +44,7 @@ function onSyncEvent(e) {
         discardPendingSave(ev.path);
         if (currentPath && (currentPath === ev.path || currentPath.startsWith(ev.path + '/'))) {
             showToast('This note was deleted on another device', 'warning');
+            goHome(); // the open buffer is now orphaned and would silently fail to save
         }
         return;
     }
