@@ -1,88 +1,113 @@
-const mermaidConfig = {
-    startOnLoad: false,
-    theme: 'base',
-    fontFamily: 'Inter',
-    themeVariables: {
-        darkMode: true,
-        background: '#1e1e2e',
-        mainBkg: '#1e1e2e',
-        primaryColor: '#313244',
-        primaryTextColor: '#cdd6f4',
-        primaryBorderColor: '#89b4fa',
-        secondaryColor: '#45475a',
-        secondaryTextColor: '#cdd6f4',
-        secondaryBorderColor: '#7f849c',
-        tertiaryColor: '#313244',
-        tertiaryTextColor: '#cdd6f4',
-        tertiaryBorderColor: '#585b70',
-        lineColor: '#89b4fa',
-        arrowheadColor: '#89b4fa',
-        textColor: '#cdd6f4',
-        titleColor: '#cba6f7',
-        noteBkgColor: '#45475a',
-        noteTextColor: '#f9e2af',
-        noteBorderColor: '#585b70',
-        nodeBkg: '#313244',
-        nodeBorder: '#89b4fa',
-        clusterBkg: '#181825',
-        clusterBorder: '#585b70',
-        defaultLinkColor: '#89b4fa',
-        edgeLabelBackground: '#313244',
-        nodeTextColor: '#cdd6f4',
-        actorBkg: '#313244',
-        actorBorder: '#89b4fa',
-        actorTextColor: '#cdd6f4',
-        actorLineColor: '#585b70',
-        signalColor: '#f5c2e7',
-        signalTextColor: '#cdd6f4',
-        labelBoxBkgColor: '#45475a',
-        labelBoxBorderColor: '#585b70',
-        labelTextColor: '#cdd6f4',
-        loopTextColor: '#f9e2af',
-        activationBorderColor: '#cba6f7',
-        activationBkgColor: '#45475a',
-        sequenceNumberColor: '#1e1e2e',
-        sectionBkgColor: '#181825',
-        altSectionBkgColor: '#1e1e2e',
-        sectionBkgColor2: '#11111b',
-        taskBkgColor: '#89b4fa',
-        taskBorderColor: '#b4befe',
-        taskTextColor: '#1e1e2e',
-        taskTextLightColor: '#1e1e2e',
-        taskTextDarkColor: '#cdd6f4',
-        taskTextOutsideColor: '#cdd6f4',
-        taskTextClickableColor: '#89dceb',
-        activeTaskBkgColor: '#cba6f7',
-        activeTaskBorderColor: '#f5c2e7',
-        doneTaskBkgColor: '#45475a',
-        doneTaskBorderColor: '#585b70',
-        critBkgColor: '#f38ba8',
-        critBorderColor: '#eba0ac',
-        gridColor: '#313244',
-        todayLineColor: '#f38ba8',
-        pie1: '#cba6f7', pie2: '#89b4fa', pie3: '#a6e3a1', pie4: '#f9e2af',
-        pie5: '#f38ba8', pie6: '#94e2d5', pie7: '#fab387', pie8: '#89dceb',
-        pie9: '#f5c2e7', pie10: '#74c7ec', pie11: '#eba0ac', pie12: '#b4befe',
-        pieTitleTextColor: '#cdd6f4',
-        pieSectionTextColor: '#1e1e2e',
-        pieLegendTextColor: '#cdd6f4',
-        pieStrokeColor: '#1e1e2e',
-        pieOuterStrokeColor: '#313244',
-        git0: '#89b4fa', git1: '#cba6f7', git2: '#a6e3a1', git3: '#f9e2af',
-        git4: '#f38ba8', git5: '#94e2d5', git6: '#fab387', git7: '#74c7ec',
-        gitInv0: '#1e1e2e', gitInv1: '#1e1e2e', gitInv2: '#1e1e2e', gitInv3: '#1e1e2e',
-        gitInv4: '#1e1e2e', gitInv5: '#1e1e2e', gitInv6: '#1e1e2e', gitInv7: '#1e1e2e',
-        commitLabelColor: '#bac2de',
-        commitLabelBackground: '#1e1e2e',
-        tagLabelColor: '#1e1e2e',
-        tagLabelBackground: '#f9e2af',
-        tagLabelBorder: '#fab387',
-        labelBackgroundColor: '#313244',
-        cScale0: '#313244', cScale1: '#89b4fa', cScale2: '#cba6f7', cScale3: '#a6e3a1',
-        cScale4: '#f9e2af', cScale5: '#f38ba8', cScale6: '#94e2d5', cScale7: '#fab387',
-        cScale8: '#89dceb', cScale9: '#f5c2e7', cScale10: '#74c7ec', cScale11: '#b4befe',
-    }
-};
+// khroma can't read var() at render time, so resolve the active Catppuccin hex from :root
+function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function buildMermaidConfig() {
+    return {
+        startOnLoad: false,
+        theme: 'base',
+        fontFamily: 'Inter',
+        themeVariables: {
+            darkMode: document.documentElement.classList.contains('dark'),
+            background: cssVar('--base'),
+            mainBkg: cssVar('--base'),
+            primaryColor: cssVar('--surface0'),
+            primaryTextColor: cssVar('--text'),
+            primaryBorderColor: cssVar('--blue'),
+            secondaryColor: cssVar('--surface1'),
+            secondaryTextColor: cssVar('--text'),
+            secondaryBorderColor: cssVar('--overlay1'),
+            tertiaryColor: cssVar('--surface0'),
+            tertiaryTextColor: cssVar('--text'),
+            tertiaryBorderColor: cssVar('--surface2'),
+            lineColor: cssVar('--blue'),
+            arrowheadColor: cssVar('--blue'),
+            textColor: cssVar('--text'),
+            titleColor: cssVar('--mauve'),
+            noteBkgColor: cssVar('--surface1'),
+            noteTextColor: cssVar('--yellow'),
+            noteBorderColor: cssVar('--surface2'),
+            nodeBkg: cssVar('--surface0'),
+            nodeBorder: cssVar('--blue'),
+            clusterBkg: cssVar('--mantle'),
+            clusterBorder: cssVar('--surface2'),
+            defaultLinkColor: cssVar('--blue'),
+            edgeLabelBackground: cssVar('--surface0'),
+            nodeTextColor: cssVar('--text'),
+            actorBkg: cssVar('--surface0'),
+            actorBorder: cssVar('--blue'),
+            actorTextColor: cssVar('--text'),
+            actorLineColor: cssVar('--surface2'),
+            signalColor: cssVar('--pink'),
+            signalTextColor: cssVar('--text'),
+            labelBoxBkgColor: cssVar('--surface1'),
+            labelBoxBorderColor: cssVar('--surface2'),
+            labelTextColor: cssVar('--text'),
+            loopTextColor: cssVar('--yellow'),
+            activationBorderColor: cssVar('--mauve'),
+            activationBkgColor: cssVar('--surface1'),
+            sequenceNumberColor: cssVar('--base'),
+            sectionBkgColor: cssVar('--mantle'),
+            altSectionBkgColor: cssVar('--base'),
+            sectionBkgColor2: cssVar('--crust'),
+            taskBkgColor: cssVar('--blue'),
+            taskBorderColor: cssVar('--lavender'),
+            taskTextColor: cssVar('--base'),
+            taskTextLightColor: cssVar('--base'),
+            taskTextDarkColor: cssVar('--text'),
+            taskTextOutsideColor: cssVar('--text'),
+            taskTextClickableColor: cssVar('--sky'),
+            activeTaskBkgColor: cssVar('--mauve'),
+            activeTaskBorderColor: cssVar('--pink'),
+            doneTaskBkgColor: cssVar('--surface1'),
+            doneTaskBorderColor: cssVar('--surface2'),
+            critBkgColor: cssVar('--red'),
+            critBorderColor: cssVar('--maroon'),
+            gridColor: cssVar('--surface0'),
+            todayLineColor: cssVar('--red'),
+            pie1: cssVar('--mauve'), pie2: cssVar('--blue'), pie3: cssVar('--green'), pie4: cssVar('--yellow'),
+            pie5: cssVar('--red'), pie6: cssVar('--teal'), pie7: cssVar('--peach'), pie8: cssVar('--sky'),
+            pie9: cssVar('--pink'), pie10: cssVar('--sapphire'), pie11: cssVar('--maroon'), pie12: cssVar('--lavender'),
+            pieTitleTextColor: cssVar('--text'),
+            pieSectionTextColor: cssVar('--base'),
+            pieLegendTextColor: cssVar('--text'),
+            pieStrokeColor: cssVar('--base'),
+            pieOuterStrokeColor: cssVar('--surface0'),
+            git0: cssVar('--blue'), git1: cssVar('--mauve'), git2: cssVar('--green'), git3: cssVar('--yellow'),
+            git4: cssVar('--red'), git5: cssVar('--teal'), git6: cssVar('--peach'), git7: cssVar('--sapphire'),
+            gitInv0: cssVar('--base'), gitInv1: cssVar('--base'), gitInv2: cssVar('--base'), gitInv3: cssVar('--base'),
+            gitInv4: cssVar('--base'), gitInv5: cssVar('--base'), gitInv6: cssVar('--base'), gitInv7: cssVar('--base'),
+            commitLabelColor: cssVar('--subtext1'),
+            commitLabelBackground: cssVar('--base'),
+            tagLabelColor: cssVar('--base'),
+            tagLabelBackground: cssVar('--yellow'),
+            tagLabelBorder: cssVar('--peach'),
+            labelBackgroundColor: cssVar('--surface0'),
+            cScale0: cssVar('--surface0'), cScale1: cssVar('--blue'), cScale2: cssVar('--mauve'), cScale3: cssVar('--green'),
+            cScale4: cssVar('--yellow'), cScale5: cssVar('--red'), cScale6: cssVar('--teal'), cScale7: cssVar('--peach'),
+            cScale8: cssVar('--sky'), cScale9: cssVar('--pink'), cScale10: cssVar('--sapphire'), cScale11: cssVar('--lavender'),
+        }
+    };
+}
+
+const plainMermaidConfig = { startOnLoad: false, theme: 'default' };
+
+// mermaid.run() overwrites a node's innerHTML, so the source is stashed once to survive a re-render
+function renderMermaid(root, config) {
+    if (typeof mermaid === 'undefined') return Promise.resolve();
+    const nodes = root.querySelectorAll('.mermaid');
+    nodes.forEach(node => {
+        if (node.dataset.mermaidSrc === undefined) {
+            node.dataset.mermaidSrc = node.textContent;
+        } else {
+            node.textContent = node.dataset.mermaidSrc;
+            node.removeAttribute('data-processed');
+        }
+    });
+    mermaid.initialize(config);
+    return mermaid.run({ nodes }).catch(() => {});
+}
 
 function generateId(text) {
     return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
@@ -228,10 +253,7 @@ function togglePreview(force = null) {
         fixImagePaths();
         wrapTables();
         addCopyButtons();
-        if (typeof mermaid !== 'undefined') {
-            mermaid.initialize(mermaidConfig);
-            mermaid.run({ nodes: els.markdownBody.querySelectorAll('.mermaid') });
-        }
+        queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
         lucide.createIcons();
         buildToc();
 

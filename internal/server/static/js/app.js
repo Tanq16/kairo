@@ -11,6 +11,7 @@ const els = {
     unsavedIndicator: document.getElementById('unsaved-indicator'),
     previewBtn: document.getElementById('preview-btn'),
     printBtn: document.getElementById('print-btn'),
+    themeToggle: document.getElementById('theme-toggle'),
     deleteBtn: document.getElementById('delete-btn'),
     sidebar: document.getElementById('sidebar'),
     sidebarOverlay: document.getElementById('sidebar-overlay'),
@@ -44,6 +45,15 @@ const els = {
         path: document.getElementById('delete-path'),
         confirm: document.getElementById('delete-confirm'),
         cancel: document.getElementById('delete-cancel')
+    },
+    printModal: {
+        backdrop: document.getElementById('print-modal'),
+        styled100: document.getElementById('print-styled-100'),
+        plain100: document.getElementById('print-plain-100'),
+        styledScaled: document.getElementById('print-styled-scaled'),
+        plainScaled: document.getElementById('print-plain-scaled'),
+        scaleInput: document.getElementById('print-scale-input'),
+        cancel: document.getElementById('print-cancel')
     }
 };
 
@@ -182,7 +192,63 @@ function goHome() {
     refreshTree();
 }
 
+const THEME_KEY = 'kairo-theme';
+
+function setThemeIcon() {
+    els.themeToggle.innerHTML = `<i data-lucide="${document.documentElement.classList.contains('dark') ? 'sun' : 'moon'}" class="w-4 h-4"></i>`;
+}
+
+function toggleTheme() {
+    const dark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+    document.getElementById('hljs-dark').disabled = !dark;
+    document.getElementById('hljs-light').disabled = dark;
+    setThemeIcon();
+    lucide.createIcons();
+    queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
+}
+
+let renderChain = Promise.resolve();
+function queueRender(fn) {
+    renderChain = renderChain.then(fn).catch(() => {});
+    return renderChain;
+}
+
+function printScale() {
+    const v = parseFloat(els.printModal.scaleInput.value);
+    return v > 0 ? v / 100 : 0.75;
+}
+
+function runPrint(theme, scale) {
+    els.printModal.backdrop.classList.add('hidden');
+    if (!previewMode) togglePreview(true);
+    const plain = theme === 'plain';
+    const originalTitle = document.title;
+
+    const restore = () => {
+        document.body.classList.remove('print-plain');
+        document.body.style.removeProperty('--print-scale');
+        document.title = originalTitle;
+        clearPrintPages();
+        if (plain) queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
+    };
+
+    queueRender(async () => {
+        // Browsers seed the Save-as-PDF filename from document.title
+        if (currentPath) document.title = currentPath.split('/').pop();
+        document.body.style.setProperty('--print-scale', String(scale));
+        if (plain) {
+            document.body.classList.add('print-plain');
+            await renderMermaid(els.markdownBody, plainMermaidConfig);
+        }
+        buildPrintPages();
+        window.addEventListener('afterprint', restore, { once: true });
+        setTimeout(() => window.print(), 100);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+    setThemeIcon();
     lucide.createIcons();
     initMarked();
     initEditor();
@@ -288,10 +354,6 @@ async function loadFile(path, isDir = false) {
         wrapTables();
 
         addCopyButtons();
-        if (typeof mermaid !== 'undefined') {
-            mermaid.initialize(mermaidConfig);
-            mermaid.run({ nodes: els.markdownBody.querySelectorAll('.mermaid') });
-        }
         lucide.createIcons();
 
         togglePreview(true);
@@ -454,19 +516,17 @@ async function moveItem(oldPath, newPath) {
 
 function initEventListeners() {
     els.previewBtn.addEventListener('click', () => togglePreview());
+    els.themeToggle.addEventListener('click', toggleTheme);
     if (els.printBtn) {
-        els.printBtn.addEventListener('click', () => {
-            if (!previewMode) togglePreview(true);
-            // Browsers seed the Save-as-PDF filename from document.title
-            const originalTitle = document.title;
-            if (currentPath) document.title = currentPath.split('/').pop();
-            buildPrintPages();
-            window.addEventListener('afterprint', () => {
-                document.title = originalTitle;
-                clearPrintPages();
-            }, { once: true });
-            setTimeout(() => window.print(), 100);
+        els.printBtn.addEventListener('click', () => els.printModal.backdrop.classList.remove('hidden'));
+        els.printModal.cancel.addEventListener('click', () => els.printModal.backdrop.classList.add('hidden'));
+        els.printModal.backdrop.addEventListener('click', (e) => {
+            if (e.target === els.printModal.backdrop) els.printModal.backdrop.classList.add('hidden');
         });
+        els.printModal.styled100.addEventListener('click', () => runPrint('styled', 1));
+        els.printModal.plain100.addEventListener('click', () => runPrint('plain', 1));
+        els.printModal.styledScaled.addEventListener('click', () => runPrint('styled', printScale()));
+        els.printModal.plainScaled.addEventListener('click', () => runPrint('plain', printScale()));
     }
 
     els.mobileMenuBtn.addEventListener('click', () => {

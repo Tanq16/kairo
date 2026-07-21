@@ -22,40 +22,40 @@ function initEditor() {
 
     const catppuccinTheme = EditorView.theme({
         '&': {
-            backgroundColor: '#1e1e2e',
-            color: '#cdd6f4',
+            backgroundColor: 'var(--base)',
+            color: 'var(--text)',
         },
         '.cm-cursor, .cm-dropCursor': {
-            borderLeftColor: '#cdd6f4',
+            borderLeftColor: 'var(--text)',
         },
         '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-            backgroundColor: '#45475a',
+            backgroundColor: 'var(--surface1)',
         },
         '.cm-activeLine': {
-            backgroundColor: 'rgba(49, 50, 68, 0.3)',
+            backgroundColor: 'rgb(from var(--surface0) r g b / 0.3)',
         },
         '.cm-matchingBracket': {
-            backgroundColor: 'rgba(137, 180, 250, 0.2)',
-            color: '#89b4fa',
+            backgroundColor: 'rgb(from var(--blue) r g b / 0.2)',
+            color: 'var(--blue)',
         },
     }, { dark: true });
 
     const catppuccinHighlight = HighlightStyle.define([
-        { tag: tags.heading1, color: '#b4befe', fontWeight: 'bold' },
-        { tag: tags.heading2, color: '#cba6f7', fontWeight: 'bold' },
-        { tag: tags.heading3, color: '#89b4fa', fontWeight: 'bold' },
-        { tag: [tags.heading4, tags.heading5, tags.heading6], color: '#cdd6f4', fontWeight: 'bold' },
-        { tag: tags.emphasis, color: '#f9e2af', fontStyle: 'italic' },
-        { tag: tags.strong, color: '#f9e2af', fontWeight: 'bold' },
-        { tag: tags.strikethrough, color: '#7f849c', textDecoration: 'line-through' },
-        { tag: tags.link, color: '#89b4fa', textDecoration: 'underline' },
-        { tag: tags.url, color: '#89b4fa' },
-        { tag: [tags.processingInstruction, tags.monospace], color: '#fab387' },
-        { tag: tags.quote, color: '#a6adc8', fontStyle: 'italic' },
-        { tag: tags.list, color: '#a6e3a1' },
-        { tag: tags.contentSeparator, color: '#45475a' },
-        { tag: tags.meta, color: '#7f849c' },
-        { tag: tags.labelName, color: '#89b4fa' },
+        { tag: tags.heading1, color: 'var(--lavender)', fontWeight: 'bold' },
+        { tag: tags.heading2, color: 'var(--mauve)', fontWeight: 'bold' },
+        { tag: tags.heading3, color: 'var(--blue)', fontWeight: 'bold' },
+        { tag: [tags.heading4, tags.heading5, tags.heading6], color: 'var(--text)', fontWeight: 'bold' },
+        { tag: tags.emphasis, color: 'var(--yellow)', fontStyle: 'italic' },
+        { tag: tags.strong, color: 'var(--yellow)', fontWeight: 'bold' },
+        { tag: tags.strikethrough, color: 'var(--overlay1)', textDecoration: 'line-through' },
+        { tag: tags.link, color: 'var(--blue)', textDecoration: 'underline' },
+        { tag: tags.url, color: 'var(--blue)' },
+        { tag: [tags.processingInstruction, tags.monospace], color: 'var(--peach)' },
+        { tag: tags.quote, color: 'var(--subtext0)', fontStyle: 'italic' },
+        { tag: tags.list, color: 'var(--green)' },
+        { tag: tags.contentSeparator, color: 'var(--surface1)' },
+        { tag: tags.meta, color: 'var(--overlay1)' },
+        { tag: tags.labelName, color: 'var(--blue)' },
     ]);
 
     const extensions = [
