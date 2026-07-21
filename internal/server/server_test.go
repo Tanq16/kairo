@@ -68,7 +68,6 @@ func TestWriteServiceError(t *testing.T) {
 }
 
 func TestContentToken(t *testing.T) {
-	// pinned SHA-256 vector for the empty input keeps determinism honest against a real value
 	const emptySHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	if got := contentToken(nil); got != emptySHA {
 		t.Fatalf("contentToken(nil) = %q, want %q", got, emptySHA)
@@ -111,7 +110,6 @@ func TestTokenTableChanged(t *testing.T) {
 	if !tt.changed("p", tokB) {
 		t.Fatal("changed() after drop() must report changed again")
 	}
-	// set() seeds last so a matching changed() stays quiet — the autosave no-op guard
 	tt.set("r", tokA)
 	if tt.changed("r", tokA) {
 		t.Fatal("changed() matching a seeded token must report unchanged")
@@ -145,8 +143,6 @@ func TestTokenTableConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
-// newRunningHub starts the hub goroutine; every test's first interaction is a
-// synchronous channel handoff, which proves run() is looping before shutdown().
 func newRunningHub(t *testing.T) *hub {
 	t.Helper()
 	h := newHub()
@@ -174,7 +170,6 @@ func unregisterClient(t *testing.T, h *hub, c *client) {
 	}
 }
 
-// mustRecv fails fast on a timeout so a missed broadcast never deadlocks the suite.
 func mustRecv(t *testing.T, ch <-chan Event) Event {
 	t.Helper()
 	select {
@@ -229,12 +224,10 @@ func TestHubDropsSlowClient(t *testing.T) {
 	healthy := registerClient(t, h, 16)
 	slow := registerClient(t, h, 1)
 
-	// broadcast is unbuffered, so each emit returns only after run() has finished
-	// fanning out the previous event; by the time emit("3") returns, the "2" fan-out
-	// (which overflows slow's buffer and drops it) has already completed.
-	h.emit(Event{Path: "1"}) // buffers into slow (now full) and healthy
-	h.emit(Event{Path: "2"}) // slow full -> default case drops it
-	h.emit(Event{Path: "3"}) // slow gone; healthy unaffected
+	// broadcast is unbuffered, so each emit returns only after run() finished the prior fan-out; by the time emit("3") returns, "2" has already overflowed and dropped slow
+	h.emit(Event{Path: "1"})
+	h.emit(Event{Path: "2"})
+	h.emit(Event{Path: "3"})
 
 	for _, want := range []string{"1", "2", "3"} {
 		if got := mustRecv(t, healthy.send); got.Path != want {
@@ -290,7 +283,6 @@ func TestHubShutdown(t *testing.T) {
 		t.Fatal("client channel not closed by shutdown")
 	}
 
-	// emit() after shutdown selects the closed done channel: no panic, no block
 	done := make(chan struct{})
 	go func() {
 		h.emit(Event{Path: "after-shutdown"})
@@ -329,7 +321,7 @@ func TestHubConcurrent(t *testing.T) {
 				}
 				drained := make(chan struct{})
 				go func() {
-					for range c.send { // ends when run() drops and closes the channel
+					for range c.send {
 					}
 					close(drained)
 				}()

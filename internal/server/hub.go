@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// Event is an advisory, path-only change notification fanned out to SSE clients. It
-// never carries note content; a client re-fetches through the file/tree APIs.
 type Event struct {
 	Op      string `json:"op"`
 	Path    string `json:"path"`
@@ -22,8 +20,7 @@ type client struct {
 	send chan Event
 }
 
-// hub is a single-goroutine pub/sub: only run() reads or writes clients and only run()
-// ever closes a send channel, which keeps the fan-out lock-free and panic-free.
+// single-owner hub: only run() reads/writes clients or closes a send channel — the lock-free, panic-free invariant
 type hub struct {
 	register   chan *client
 	unregister chan *client
@@ -55,7 +52,7 @@ func (h *hub) run() {
 				select {
 				case c.send <- ev:
 				default:
-					h.drop(c) // a client that can't keep up is dropped, never blocks the hub
+					h.drop(c)
 				}
 			}
 		case <-h.done:
@@ -67,8 +64,7 @@ func (h *hub) run() {
 	}
 }
 
-// drop is only ever called from run(); the membership check makes a repeat drop a
-// no-op so a slow-client drop followed by the handler's unregister can't double-close.
+// run()-only; the membership check makes a repeat drop a no-op so a slow-client drop then the handler's unregister can't double-close
 func (h *hub) drop(c *client) {
 	if _, ok := h.clients[c]; ok {
 		delete(h.clients, c)
@@ -76,8 +72,6 @@ func (h *hub) drop(c *client) {
 	}
 }
 
-// emit blocks only until run() takes the event (run itself never blocks) or the hub
-// shuts down, so a mutation handler is never stalled and broadcast is never closed.
 func (h *hub) emit(ev Event) {
 	select {
 	case h.broadcast <- ev:
@@ -109,7 +103,6 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() {
-		// a shut-down hub has already stopped reading unregister, so guard on done or block forever
 		select {
 		case s.hub.unregister <- c:
 		case <-s.hub.done:
@@ -124,7 +117,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		case ev, ok := <-c.send:
 			if !ok {
-				return // hub closed us: shutdown or slow-client drop
+				return
 			}
 			data, err := json.Marshal(ev)
 			if err != nil {

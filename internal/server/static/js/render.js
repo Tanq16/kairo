@@ -244,9 +244,6 @@ function fixImagePaths() {
     });
 }
 
-// The single preview-render pipeline: sanitize+parse the markdown, then run every
-// post-processor in order. Initial load, manual toggle, and live sync all go through
-// here so a new render step is added once, never drifting across copies.
 function renderMarkdownBody(content) {
     els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(content));
     fixImagePaths();

@@ -103,8 +103,7 @@ func (s *Server) Run() error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		log.Printf("INFO Shutting down")
-		// close the SSE streams first: a live stream never idles, so it would otherwise
-		// pin srv.Shutdown until its full timeout
+		// close SSE streams first — a live stream never idles and would otherwise pin srv.Shutdown to its full timeout
 		s.hub.shutdown()
 		return srv.Shutdown(shutdownCtx)
 	}

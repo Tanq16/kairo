@@ -102,7 +102,6 @@ function debounceSave(path, content) {
     saveTimer = setTimeout(flushPendingSave, 1000);
 }
 
-// sync.js consults this before applying a remote change, so a queued save is never clobbered
 function hasPendingSave(path) {
     return pendingSaves.has(path);
 }
@@ -234,7 +233,7 @@ async function uploadAndInsertImage(file) {
     formData.append('file', file);
     formData.append('notePath', encPath(currentPath));
     try {
-        // No Content-Type: the browser sets the multipart boundary; only tag the writer for echo suppression
+        // no Content-Type header: the browser must set the multipart boundary itself
         const res = await fetch('/api/upload', { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT }, body: formData });
         if (!res.ok) throw new Error('upload failed: ' + res.status);
         const imgPath = await res.text();

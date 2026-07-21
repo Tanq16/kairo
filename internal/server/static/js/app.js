@@ -67,10 +67,8 @@ let treeData = [];
 let createMode = 'file';
 let expandedFolders = new Set(JSON.parse(localStorage.getItem('kairo-expanded-folders') || '[]'));
 
-// sha256 token of the open note, used by sync.js to skip an update it already holds
 let currentFileToken = null;
-// Per-tab id echoed back on this tab's own change events so sync.js can ignore them.
-// crypto.randomUUID is secure-context-only (undefined over plain-HTTP LAN), so fall back.
+// per-tab id for echo suppression; crypto.randomUUID is secure-context-only (undefined over plain-HTTP LAN), hence the manual fallback
 const KAIRO_CLIENT = (() => {
     if (crypto.randomUUID) { try { return crypto.randomUUID(); } catch (e) {} }
     const b = crypto.getRandomValues(new Uint8Array(16));

@@ -28,9 +28,7 @@ func writeServiceError(w http.ResponseWriter, action string, err error) {
 	}
 }
 
-// clientID identifies the writing tab so its own SSE echo can be suppressed. The POST
-// path carries it as a header; the beforeunload sendBeacon (which cannot set headers)
-// carries it as a query parameter.
+// sendBeacon (used on beforeunload) can't set headers, so it passes the client id as a query param instead of X-Kairo-Client
 func clientID(r *http.Request) string {
 	if id := r.Header.Get("X-Kairo-Client"); id != "" {
 		return id
@@ -108,7 +106,6 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// only announce a save that actually changed bytes, so viewers don't churn on no-op autosaves
 	token := contentToken([]byte(req.Content))
 	if s.tokens.changed(decodedPath, token) {
 		s.hub.emit(Event{Op: "save", Path: decodedPath, Token: token, Origin: clientID(r)})
@@ -211,8 +208,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// drop, don't migrate: Move rewrites in-note attachment links, so the old token no
-	// longer matches disk and keeping it could wrongly suppress the next save's emit
+	// Move rewrites in-note attachment links, so the old token is stale — drop it rather than migrate it to the new path
 	s.tokens.drop(decodedOldPath)
 	s.hub.emit(Event{Op: "move", Path: decodedOldPath, NewPath: decodedNewPath, Origin: clientID(r)})
 	w.WriteHeader(http.StatusOK)
