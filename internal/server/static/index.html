@@ -16,7 +16,17 @@
     <script src="/static/js/marked.min.js"></script>
     <script src="/static/js/dompurify.min.js"></script>
     <script src="/static/js/highlight.min.js"></script>
-    <link rel="stylesheet" href="/static/css/github-dark.min.css">
+    <link id="hljs-dark" rel="stylesheet" href="/static/css/github-dark.min.css">
+    <link id="hljs-light" rel="stylesheet" href="/static/css/github.min.css" disabled>
+    <script>
+        (function () {
+            if (localStorage.getItem('kairo-theme') === 'light') {
+                document.documentElement.classList.remove('dark');
+                document.getElementById('hljs-dark').disabled = true;
+                document.getElementById('hljs-light').disabled = false;
+            }
+        })();
+    </script>
     <script src="/static/js/mermaid.min.js"></script>
 
     <script src="/static/js/codemirror-bundle.min.js"></script>
@@ -35,15 +45,32 @@
             --base: #1e1e2e; --mantle: #181825; --crust: #11111b;
         }
 
+        /* Catppuccin Latte — neutrals re-leveled for a white canvas */
+        :root:not(.dark) {
+            --rosewater: #dc8a78; --flamingo: #dd7878; --pink: #ea76cb;
+            --mauve: #8839ef; --red: #d20f39; --maroon: #e64553;
+            --peach: #fe640b; --yellow: #df8e1d; --green: #40a02b;
+            --teal: #179299; --sky: #04a5e5; --sapphire: #209fb5;
+            --blue: #1e66f5; --lavender: #7287fd; --text: #4c4f69;
+            --subtext1: #5c5f77; --subtext0: #6c6f85; --overlay2: #7c7f93;
+            --overlay1: #8c8fa1; --overlay0: #9ca0b0; --surface2: #ccd0da;
+            --surface1: #dcdfe7; --surface0: #e9ecf1;
+            --base: #ffffff; --mantle: #f5f6f9; --crust: #ffffff;
+        }
+
         /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #11111b; }
-        ::-webkit-scrollbar-thumb { background: #313244; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #45475a; }
+        ::-webkit-scrollbar-track { background: var(--crust); }
+        ::-webkit-scrollbar-thumb { background: var(--surface0); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--surface1); }
+        :root:not(.dark)::-webkit-scrollbar-thumb,
+        :root:not(.dark) ::-webkit-scrollbar-thumb { background: var(--surface2); }
+        :root:not(.dark)::-webkit-scrollbar-thumb:hover,
+        :root:not(.dark) ::-webkit-scrollbar-thumb:hover { background: var(--overlay0); }
 
         /* Editor — CodeMirror container */
         #editor {
-            background-color: #1e1e2e;
+            background-color: var(--base);
             height: 100%;
         }
         #editor .cm-editor {
@@ -58,7 +85,7 @@
             line-height: 1.4;
         }
         #editor .cm-content {
-            caret-color: #cdd6f4;
+            caret-color: var(--text);
         }
         #editor .cm-gutters {
             display: none;
@@ -83,6 +110,25 @@
         .print-page th, .print-page td { overflow-wrap: break-word; }
         .print-page .overflow-x-auto, .print-page .mermaid { overflow: visible; }
         .print-page .copy-code-btn { display: none !important; }
+        .print-page .markdown-body { font-size: calc(16px * var(--print-scale, 1)); }
+        /* Plain B&W export: recolor existing border sides only — adding a side shifts pagination */
+        .print-plain .print-page { background: #fff !important; }
+        .print-plain .print-page .markdown-body,
+        .print-plain .print-page h1, .print-plain .print-page h2, .print-plain .print-page h3,
+        .print-plain .print-page h4, .print-plain .print-page h5, .print-plain .print-page h6,
+        .print-plain .print-page a,
+        .print-plain .print-page blockquote,
+        .print-plain .print-page .callout-icon { color: #000 !important; }
+        .print-plain .print-page h1, .print-plain .print-page h2, .print-plain .print-page hr { border-color: #000 !important; }
+        .print-plain .print-page table { border-color: #000 !important; }
+        .print-plain .print-page th, .print-plain .print-page td { color: #000 !important; border-bottom-color: #000 !important; border-right-color: #000 !important; }
+        .print-plain .print-page thead, .print-plain .print-page table tr:nth-child(2n) { background: transparent !important; }
+        .print-plain .print-page .callout { background: transparent !important; }
+        .print-plain .print-page pre { background: transparent !important; }
+        .print-plain .print-page code { color: #000 !important; background: transparent !important; }
+        .print-plain .print-page pre * { color: #000 !important; }
+        .print-plain .print-page blockquote { border-left-color: #000 !important; }
+        .print-plain .mermaid { background: transparent; }
         @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; transition: none !important; }
             @page { size: letter; margin: 0; }
@@ -173,7 +219,7 @@
         .markdown-body {
             background-color: transparent !important;
             font-family: 'Inter', sans-serif !important;
-            color: #a6adc8 !important;
+            color: var(--subtext0) !important;
             line-height: 1.6;
             font-size: 16px;
         }
@@ -186,26 +232,26 @@
             padding-bottom: 0.3em;
         }
         
-        .markdown-body h1 { 
-            border-bottom: 1px solid #313244;
-        }
-        
-        .markdown-body h2 { 
-            border-bottom: 1px solid rgba(49, 50, 68, 0.5);
+        .markdown-body h1 {
+            border-bottom: 1px solid var(--surface0);
         }
 
-        .markdown-body h1 { font-size: 2em; color: #b4befe !important; }
-        .markdown-body h2 { font-size: 1.5em; color: #cba6f7 !important; }
-        .markdown-body h3 { font-size: 1.25em; color: #89b4fa !important; }
-        .markdown-body h4 { font-size: 1em; font-weight: 600; color: #cdd6f4; }
-        .markdown-body h5 { font-size: 0.875em; font-weight: 600; color: #cdd6f4; }
-        .markdown-body h6 { font-size: 0.85em; color: #a6adc8; }
+        .markdown-body h2 {
+            border-bottom: 1px solid rgb(from var(--surface0) r g b / 0.5);
+        }
+
+        .markdown-body h1 { font-size: 2em; color: var(--lavender) !important; }
+        .markdown-body h2 { font-size: 1.5em; color: var(--mauve) !important; }
+        .markdown-body h3 { font-size: 1.25em; color: var(--blue) !important; }
+        .markdown-body h4 { font-size: 1em; font-weight: 600; color: var(--text); }
+        .markdown-body h5 { font-size: 0.875em; font-weight: 600; color: var(--text); }
+        .markdown-body h6 { font-size: 0.85em; color: var(--subtext0); }
         .markdown-body p { margin-bottom: 16px; }
-        .markdown-body a { color: #89b4fa; text-decoration: none; }
+        .markdown-body a { color: var(--blue); text-decoration: none; }
         .markdown-body a:hover { text-decoration: underline; }
 
         .markdown-body pre {
-            background-color: #181825 !important;
+            background-color: var(--mantle) !important;
             border-radius: 0.75rem;
             padding: 1rem !important;
             margin-bottom: 16px;
@@ -214,8 +260,8 @@
 
         .markdown-body code {
             font-family: 'JetBrains Mono', monospace;
-            color: #fab387 !important;
-            background-color: #313244 !important;
+            color: var(--peach) !important;
+            background-color: var(--surface0) !important;
             border-radius: 4px;
             padding: 0.2em 0.4em;
             font-size: 0.9375em;
@@ -241,22 +287,22 @@
             width: 100% !important;
             border-collapse: separate;
             border-spacing: 0;
-            border: 1px solid rgba(69, 71, 90, 0.5);
+            border: 1px solid rgb(from var(--surface1) r g b / 0.5);
             border-radius: 8px;
             overflow: hidden;
             margin-bottom: 1.5rem;
         }
-        .markdown-body table thead { background-color: rgba(203, 166, 247, 0.1); }
+        .markdown-body table thead { background-color: rgb(from var(--mauve) r g b / 0.1); }
         .markdown-body table tr { background-color: transparent !important; border: none !important; }
-        .markdown-body table tr:nth-child(2n) { background-color: rgba(49, 50, 68, 0.3) !important; }
+        .markdown-body table tr:nth-child(2n) { background-color: rgb(from var(--surface0) r g b / 0.3) !important; }
         .markdown-body table th {
-            color: #cba6f7 !important; font-weight: 600;
-            border: none !important; border-bottom: 1px solid rgba(69, 71, 90, 0.5) !important;
-            border-right: 1px solid rgba(49, 50, 68, 0.5); padding: 12px 16px !important; text-align: left;
+            color: var(--mauve) !important; font-weight: 600;
+            border: none !important; border-bottom: 1px solid rgb(from var(--surface1) r g b / 0.5) !important;
+            border-right: 1px solid rgb(from var(--surface0) r g b / 0.5); padding: 12px 16px !important; text-align: left;
         }
         .markdown-body table td {
-            border: none !important; border-bottom: 1px solid rgba(49, 50, 68, 0.3) !important;
-            border-right: 1px solid rgba(49, 50, 68, 0.3); color: #a6adc8 !important;
+            border: none !important; border-bottom: 1px solid rgb(from var(--surface0) r g b / 0.3) !important;
+            border-right: 1px solid rgb(from var(--surface0) r g b / 0.3); color: var(--subtext0) !important;
             padding: 12px 16px !important; text-align: left;
         }
         .markdown-body table th:last-child, .markdown-body table td:last-child { border-right: none; }
@@ -270,15 +316,15 @@
         #markdown-body img { max-width: 100%; height: auto; }
 
         .markdown-body blockquote {
-            border-left: 0.25em solid rgba(69, 71, 90, 0.5);
+            border-left: 0.25em solid rgb(from var(--surface1) r g b / 0.5);
             padding: 0 1em;
-            color: #a6adc8;
+            color: var(--subtext0);
             margin-bottom: 16px;
         }
 
         .markdown-body hr {
             border: none;
-            border-top: 1px solid #313244;
+            border-top: 1px solid var(--surface0);
             margin: 1.5em 0;
         }
 
@@ -289,7 +335,7 @@
             display: flex;
             gap: 0.75rem;
             align-items: flex-start;
-            background-color: rgba(49, 50, 68, 0.2);
+            background-color: rgb(from var(--surface0) r g b / 0.2);
         }
         .callout-icon { 
             display: inline-flex;
@@ -304,19 +350,19 @@
         }
         .callout-content { flex: 1; }
         .callout-content p { margin: 0 !important; }
-        .callout.tip { background-color: rgba(166, 227, 161, 0.1); }
-        .callout.tip .callout-icon { color: #a6e3a1; }
-        .callout.info { background-color: rgba(137, 180, 250, 0.1); }
-        .callout.info .callout-icon { color: #89b4fa; }
-        .callout.danger { background-color: rgba(243, 139, 168, 0.1); }
-        .callout.danger .callout-icon { color: #f38ba8; }
-        .callout.warning { background-color: rgba(250, 179, 135, 0.1); }
-        .callout.warning .callout-icon { color: #fab387; }
-        .callout.note { background-color: rgba(203, 166, 247, 0.1); }
-        .callout.note .callout-icon { color: #cba6f7; }
+        .callout.tip { background-color: rgb(from var(--green) r g b / 0.1); }
+        .callout.tip .callout-icon { color: var(--green); }
+        .callout.info { background-color: rgb(from var(--blue) r g b / 0.1); }
+        .callout.info .callout-icon { color: var(--blue); }
+        .callout.danger { background-color: rgb(from var(--red) r g b / 0.1); }
+        .callout.danger .callout-icon { color: var(--red); }
+        .callout.warning { background-color: rgb(from var(--peach) r g b / 0.1); }
+        .callout.warning .callout-icon { color: var(--peach); }
+        .callout.note { background-color: rgb(from var(--mauve) r g b / 0.1); }
+        .callout.note .callout-icon { color: var(--mauve); }
 
         .mermaid {
-            background-color: #181825;
+            background-color: var(--mantle);
             padding: 1rem;
             border-radius: 0.5rem;
             margin: 1.5rem 0;
@@ -325,52 +371,52 @@
         }
 
         /* Gantt chart fixes */
-        .mermaid .grid .tick line {
-            stroke: #313244 !important;
+        body:not(.print-plain) .mermaid .grid .tick line {
+            stroke: var(--surface0) !important;
             stroke-width: 0.5px !important;
             opacity: 0.5 !important;
         }
-        .mermaid .grid .tick text {
-            fill: #a6adc8 !important;
+        body:not(.print-plain) .mermaid .grid .tick text {
+            fill: var(--subtext0) !important;
         }
-        .mermaid .grid path {
-            stroke: #313244 !important;
+        body:not(.print-plain) .mermaid .grid path {
+            stroke: var(--surface0) !important;
             stroke-width: 0.5px !important;
         }
-        .mermaid .section {
+        body:not(.print-plain) .mermaid .section {
             stroke: none !important;
         }
-        .mermaid .section0, .mermaid .section2 {
-            fill: #181825 !important;
+        body:not(.print-plain) .mermaid .section0, body:not(.print-plain) .mermaid .section2 {
+            fill: var(--mantle) !important;
         }
-        .mermaid .section1, .mermaid .section3 {
-            fill: #1e1e2e !important;
+        body:not(.print-plain) .mermaid .section1, body:not(.print-plain) .mermaid .section3 {
+            fill: var(--base) !important;
         }
-        .mermaid .today {
-            stroke: #f38ba8 !important;
+        body:not(.print-plain) .mermaid .today {
+            stroke: var(--red) !important;
             stroke-width: 2px !important;
         }
-        .mermaid .taskText {
-            fill: #1e1e2e !important;
+        body:not(.print-plain) .mermaid .taskText {
+            fill: var(--base) !important;
             font-size: 0.75em !important;
         }
-        .mermaid .taskTextOutsideRight,
-        .mermaid .taskTextOutsideLeft {
-            fill: #cdd6f4 !important;
+        body:not(.print-plain) .mermaid .taskTextOutsideRight,
+        body:not(.print-plain) .mermaid .taskTextOutsideLeft {
+            fill: var(--text) !important;
         }
-        .mermaid .sectionTitle {
-            fill: #cba6f7 !important;
+        body:not(.print-plain) .mermaid .sectionTitle {
+            fill: var(--mauve) !important;
         }
-        .mermaid .titleText {
-            fill: #cba6f7 !important;
+        body:not(.print-plain) .mermaid .titleText {
+            fill: var(--mauve) !important;
         }
 
         .copy-code-btn {
             position: absolute; top: 0.5rem; right: 0.5rem;
             padding: 0.5rem;
-            background-color: rgba(49, 50, 68, 0.95);
+            background-color: rgb(from var(--surface0) r g b / 0.95);
             border-radius: 0.375rem;
-            color: #a6adc8;
+            color: var(--subtext0);
             cursor: pointer;
             opacity: 0;
             transition: all 0.2s ease;
@@ -379,8 +425,8 @@
         }
         pre { position: relative; }
         pre:hover .copy-code-btn { opacity: 1; }
-        .copy-code-btn:hover { background-color: rgba(69, 71, 90, 1); color: #cba6f7; }
-        .copy-code-btn.copied { color: #a6e3a1; }
+        .copy-code-btn:hover { background-color: rgb(from var(--surface1) r g b / 1); color: var(--mauve); }
+        .copy-code-btn.copied { color: var(--green); }
     </style>
 
     <script>
@@ -444,6 +490,9 @@
                 </button>
                 <button id="toc-toggle" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors hidden" title="Toggle contents">
                     <i data-lucide="list" class="w-4 h-4"></i>
+                </button>
+                <button id="theme-toggle" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors" title="Toggle theme">
+                    <i data-lucide="sun" class="w-4 h-4"></i>
                 </button>
                 <button id="print-btn" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors hidden" title="Print Document">
                     <i data-lucide="printer" class="w-4 h-4"></i>
@@ -527,6 +576,30 @@
         </div>
     </div>
     
+    <!-- Print Modal -->
+    <div id="print-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center backdrop-blur">
+        <div class="bg-mantle border border-surface1 rounded-xl p-6 w-96">
+            <h3 class="font-bold text-lavender mb-4 flex items-center gap-2">
+                <i data-lucide="printer" class="w-5 h-5"></i>
+                Print / Export PDF
+            </h3>
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button id="print-styled-100" class="bg-surface0 hover:bg-surface1 rounded px-3 py-2 text-sm">Styled · 100%</button>
+                <button id="print-plain-100" class="bg-surface0 hover:bg-surface1 rounded px-3 py-2 text-sm">Plain · 100%</button>
+                <button id="print-styled-scaled" class="bg-surface0 hover:bg-surface1 rounded px-3 py-2 text-sm">Styled · Custom</button>
+                <button id="print-plain-scaled" class="bg-surface0 hover:bg-surface1 rounded px-3 py-2 text-sm">Plain · Custom</button>
+            </div>
+            <div class="flex items-center gap-2 mb-4">
+                <label for="print-scale-input" class="text-sm text-subtext0">Custom scale</label>
+                <input type="number" id="print-scale-input" value="75" min="10" max="200" class="w-20 bg-surface0 border border-surface1 rounded px-2 py-1 focus:outline-none focus:border-mauve">
+                <span class="text-sm text-subtext0">%</span>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button id="print-cancel" class="text-subtext0 px-3 py-1 hover:bg-surface0 rounded">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Search Modal -->
     <div id="search-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-start justify-center backdrop-blur pt-24">
         <div class="bg-mantle border border-surface1 rounded-xl w-[36rem] max-w-[90vw] overflow-hidden">
