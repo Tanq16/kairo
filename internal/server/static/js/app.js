@@ -271,14 +271,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     els.fileTree.ondragover = (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        els.fileTree.classList.add('bg-crust/50');
+        els.fileTree.classList.add('bg-surface0/50');
     };
     els.fileTree.ondragleave = (e) => {
-        els.fileTree.classList.remove('bg-crust/50');
+        els.fileTree.classList.remove('bg-surface0/50');
     };
     els.fileTree.ondrop = async (e) => {
         e.preventDefault();
-        els.fileTree.classList.remove('bg-crust/50');
+        els.fileTree.classList.remove('bg-surface0/50');
         const draggedPath = e.dataTransfer.getData('text/plain');
         if (!draggedPath) return;
         await moveItem(draggedPath, draggedPath.split('/').pop());
