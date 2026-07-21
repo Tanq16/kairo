@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -30,6 +31,7 @@ type Server struct {
 	service *notes.Service
 	hub     *hub
 	tokens  *tokenTable
+	saveMu  sync.Mutex
 }
 
 func New(cfg Config) *Server {

@@ -101,14 +101,19 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.service.SaveFile(decodedPath, req.Content); err != nil {
+	// serialize write+token+emit so a reordered concurrent same-path save can't record a token for bytes it didn't write last
+	s.saveMu.Lock()
+	err = s.service.SaveFile(decodedPath, req.Content)
+	if err == nil {
+		token := contentToken([]byte(req.Content))
+		if s.tokens.changed(decodedPath, token) {
+			s.hub.emit(Event{Op: "save", Path: decodedPath, Token: token, Origin: clientID(r)})
+		}
+	}
+	s.saveMu.Unlock()
+	if err != nil {
 		writeServiceError(w, "save file", err)
 		return
-	}
-
-	token := contentToken([]byte(req.Content))
-	if s.tokens.changed(decodedPath, token) {
-		s.hub.emit(Event{Op: "save", Path: decodedPath, Token: token, Origin: clientID(r)})
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -179,7 +184,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.tokens.drop(decodedPath)
+	s.tokens.dropTree(decodedPath)
 	s.hub.emit(Event{Op: "delete", Path: decodedPath, Origin: clientID(r)})
 	w.WriteHeader(http.StatusOK)
 }
@@ -208,8 +213,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Move rewrites in-note attachment links, so the old token is stale — drop it rather than migrate it to the new path
-	s.tokens.drop(decodedOldPath)
+	// Move rewrites in-note attachment links, so the old token (and any descendant tokens for a moved directory) is stale — drop the tree rather than migrate it to the new path
+	s.tokens.dropTree(decodedOldPath)
 	s.hub.emit(Event{Op: "move", Path: decodedOldPath, NewPath: decodedNewPath, Origin: clientID(r)})
 	w.WriteHeader(http.StatusOK)
 }

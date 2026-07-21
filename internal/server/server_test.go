@@ -124,9 +124,7 @@ func TestTokenTableConcurrent(t *testing.T) {
 	paths := []string{"a", "b", "c", "d"}
 	var wg sync.WaitGroup
 	for i := range 32 {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			p := paths[i%len(paths)]
 			for j := range 200 {
 				switch j % 3 {
@@ -138,15 +136,68 @@ func TestTokenTableConcurrent(t *testing.T) {
 					tt.drop(p)
 				}
 			}
-		}(i)
+		})
 	}
 	wg.Wait()
+}
+
+func TestTokenTableDropTree(t *testing.T) {
+	// the "/" boundary is the crux: prefix "notes" must reach "notes/a.md" yet never the sibling "notesX.md"
+	tests := []struct {
+		name    string
+		seed    []string
+		prefix  string
+		dropped []string
+		kept    []string
+	}{
+		{
+			name:    "directory drops exact key and descendants",
+			seed:    []string{"notes", "notes/a.md", "notes/sub/b.md", "notesX.md", "other/c.md"},
+			prefix:  "notes",
+			dropped: []string{"notes", "notes/a.md", "notes/sub/b.md"},
+			kept:    []string{"notesX.md", "other/c.md"},
+		},
+		{
+			name:    "plain file behaves like drop",
+			seed:    []string{"notes/a.md", "notes/a.md.bak"},
+			prefix:  "notes/a.md",
+			dropped: []string{"notes/a.md"},
+			kept:    []string{"notes/a.md.bak"},
+		},
+		{
+			name:   "absent prefix leaves table intact",
+			seed:   []string{"a.md", "b/c.md"},
+			prefix: "missing",
+			kept:   []string{"a.md", "b/c.md"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			table := newTokenTable()
+			for _, p := range tt.seed {
+				table.set(p, contentToken([]byte(p)))
+			}
+			table.dropTree(tt.prefix)
+			// a dropped key is gone, so re-seeing its token reports changed; a kept key still matches, so it reports unchanged
+			for _, p := range tt.dropped {
+				if !table.changed(p, contentToken([]byte(p))) {
+					t.Fatalf("%q should have been dropped but is still present", p)
+				}
+			}
+			for _, p := range tt.kept {
+				if table.changed(p, contentToken([]byte(p))) {
+					t.Fatalf("%q should have been kept but was dropped", p)
+				}
+			}
+		})
+	}
 }
 
 func newRunningHub(t *testing.T) *hub {
 	t.Helper()
 	h := newHub()
-	go h.run()
+	// start via wg.Go like production so shutdown()'s wg.Wait() actually blocks on run() draining
+	h.wg.Go(h.run)
 	return h
 }
 

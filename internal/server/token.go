@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"sync"
 )
 
@@ -41,4 +42,16 @@ func (t *tokenTable) drop(path string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.last, path)
+}
+
+// dropTree removes a path and its descendants so a deleted/moved directory can't leave stale child tokens that later suppress a legitimate save; the "/" boundary stops a sibling like "notesX" being caught by prefix "notes"
+func (t *tokenTable) dropTree(prefix string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	sub := prefix + "/"
+	for key := range t.last {
+		if key == prefix || strings.HasPrefix(key, sub) {
+			delete(t.last, key)
+		}
+	}
 }
