@@ -18,7 +18,11 @@ function scheduleTreeRefresh() {
 function onSyncEvent(e) {
     let ev;
     try { ev = JSON.parse(e.data); } catch (_) { return; }
-    if (ev.origin && ev.origin === KAIRO_CLIENT) return;
+    if (ev.origin && ev.origin === KAIRO_CLIENT) {
+        // adopt our own echo's token so a later genuine remote write restoring these exact bytes isn't mistaken for our stale watermark and skipped
+        if (ev.path === currentPath && ev.token) currentFileToken = ev.token;
+        return;
+    }
 
     if (ev.op !== 'save') scheduleTreeRefresh();
 
@@ -47,6 +51,7 @@ function onSyncEvent(e) {
 }
 
 async function applyRemote(path) {
+    if (editorPath !== path) return; // only patch an open editable note; images/folders leave editorPath null, so their stale CM doc is never clobbered
     if (unsaved || hasPendingSave(path)) {
         showToast('This note changed on another device', 'info');
         return;
