@@ -32,7 +32,7 @@ function onSyncEvent(e) {
         // the open note may be the moved item itself or live inside a moved folder
         if (currentPath && (currentPath === ev.path || currentPath.startsWith(ev.path + '/'))) {
             const rebased = ev.newPath + currentPath.slice(ev.path.length);
-            rebasePendingSaves(ev.path, rebased);
+            rebasePendingSaves(ev.path, ev.newPath);
             // treeData still holds the pre-move node (refresh is debounced), so the open path's own type carries the move
             const node = findNodeInTree(treeData, currentPath);
             loadFile(rebased, node ? node.isDir : false);
