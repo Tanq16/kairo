@@ -483,6 +483,7 @@
                 </button>
                 <div id="current-filename" class="flex items-center font-medium text-subtext1 overflow-hidden whitespace-nowrap min-w-0"><span class="text-subtext0">Select a note...</span></div>
                 <span id="unsaved-indicator" class="hidden text-yellow"><i data-lucide="save" class="animate-pulse w-4 h-4"></i></span>
+                <span id="sync-status" class="w-2 h-2 rounded-full bg-overlay0 self-center" title="Live sync"></span>
             </div>
             <div class="flex items-center gap-3">
                 <button id="search-btn" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors" title="Search (Ctrl/Cmd+K)">
@@ -623,6 +624,7 @@
     <script src="/static/js/print.js"></script>
     <script src="/static/js/editor.js"></script>
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/sync.js"></script>
     <script>
         // Initialize Lucide icons after page load
         if (document.readyState === 'loading') {

@@ -244,18 +244,21 @@ function fixImagePaths() {
     });
 }
 
+function renderMarkdownBody(content) {
+    els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(content));
+    fixImagePaths();
+    wrapTables();
+    addCopyButtons();
+    queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
+    lucide.createIcons();
+    buildToc();
+}
+
 function togglePreview(force = null) {
     previewMode = force !== null ? force : !previewMode;
 
     if (previewMode) {
-        const code = view.state.doc.toString();
-        els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(code));
-        fixImagePaths();
-        wrapTables();
-        addCopyButtons();
-        queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
-        lucide.createIcons();
-        buildToc();
+        renderMarkdownBody(view.state.doc.toString());
 
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.remove('hidden');

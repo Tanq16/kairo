@@ -3,11 +3,14 @@ package server
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/tanq16/kairo/internal/notes"
 )
@@ -62,4 +65,325 @@ func TestWriteServiceError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestContentToken(t *testing.T) {
+	const emptySHA = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	if got := contentToken(nil); got != emptySHA {
+		t.Fatalf("contentToken(nil) = %q, want %q", got, emptySHA)
+	}
+	if contentToken(nil) != contentToken([]byte{}) {
+		t.Fatal("nil and an empty slice must share a token")
+	}
+	a1, a2 := contentToken([]byte("hello")), contentToken([]byte("hello"))
+	if a1 != a2 {
+		t.Fatalf("non-deterministic for identical bytes: %q vs %q", a1, a2)
+	}
+	for _, other := range []string{"world", "hellO", "hello ", "Hello"} {
+		if a1 == contentToken([]byte(other)) {
+			t.Fatalf("token collision between %q and %q", "hello", other)
+		}
+	}
+}
+
+func TestTokenTableChanged(t *testing.T) {
+	tt := newTokenTable()
+	tokA := contentToken([]byte("A"))
+	tokB := contentToken([]byte("B"))
+
+	if !tt.changed("p", tokA) {
+		t.Fatal("first token for a path must report changed")
+	}
+	if tt.changed("p", tokA) {
+		t.Fatal("re-seeing the same token must report unchanged")
+	}
+	if !tt.changed("p", tokB) {
+		t.Fatal("a new token must report changed")
+	}
+	if tt.changed("p", tokB) {
+		t.Fatal("the new token must be recorded so a repeat is unchanged")
+	}
+	if !tt.changed("q", tokB) {
+		t.Fatal("first token for an independent path must report changed")
+	}
+	tt.drop("p")
+	if !tt.changed("p", tokB) {
+		t.Fatal("changed() after drop() must report changed again")
+	}
+	tt.set("r", tokA)
+	if tt.changed("r", tokA) {
+		t.Fatal("changed() matching a seeded token must report unchanged")
+	}
+	if !tt.changed("r", tokB) {
+		t.Fatal("changed() differing from a seeded token must report changed")
+	}
+}
+
+func TestTokenTableConcurrent(t *testing.T) {
+	tt := newTokenTable()
+	paths := []string{"a", "b", "c", "d"}
+	var wg sync.WaitGroup
+	for i := range 32 {
+		wg.Go(func() {
+			p := paths[i%len(paths)]
+			for j := range 200 {
+				switch j % 3 {
+				case 0:
+					tt.changed(p, contentToken([]byte{byte(j)}))
+				case 1:
+					tt.set(p, contentToken([]byte{byte(i)}))
+				default:
+					tt.drop(p)
+				}
+			}
+		})
+	}
+	wg.Wait()
+}
+
+func TestTokenTableDropTree(t *testing.T) {
+	// the "/" boundary is the crux: prefix "notes" must reach "notes/a.md" yet never the sibling "notesX.md"
+	tests := []struct {
+		name    string
+		seed    []string
+		prefix  string
+		dropped []string
+		kept    []string
+	}{
+		{
+			name:    "directory drops exact key and descendants",
+			seed:    []string{"notes", "notes/a.md", "notes/sub/b.md", "notesX.md", "other/c.md"},
+			prefix:  "notes",
+			dropped: []string{"notes", "notes/a.md", "notes/sub/b.md"},
+			kept:    []string{"notesX.md", "other/c.md"},
+		},
+		{
+			name:    "plain file behaves like drop",
+			seed:    []string{"notes/a.md", "notes/a.md.bak"},
+			prefix:  "notes/a.md",
+			dropped: []string{"notes/a.md"},
+			kept:    []string{"notes/a.md.bak"},
+		},
+		{
+			name:   "absent prefix leaves table intact",
+			seed:   []string{"a.md", "b/c.md"},
+			prefix: "missing",
+			kept:   []string{"a.md", "b/c.md"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			table := newTokenTable()
+			for _, p := range tt.seed {
+				table.set(p, contentToken([]byte(p)))
+			}
+			table.dropTree(tt.prefix)
+			// a dropped key is gone, so re-seeing its token reports changed; a kept key still matches, so it reports unchanged
+			for _, p := range tt.dropped {
+				if !table.changed(p, contentToken([]byte(p))) {
+					t.Fatalf("%q should have been dropped but is still present", p)
+				}
+			}
+			for _, p := range tt.kept {
+				if table.changed(p, contentToken([]byte(p))) {
+					t.Fatalf("%q should have been kept but was dropped", p)
+				}
+			}
+		})
+	}
+}
+
+func newRunningHub(t *testing.T) *hub {
+	t.Helper()
+	h := newHub()
+	// start via wg.Go like production so shutdown()'s wg.Wait() actually blocks on run() draining
+	h.wg.Go(h.run)
+	return h
+}
+
+func registerClient(t *testing.T, h *hub, buffer int) *client {
+	t.Helper()
+	c := &client{send: make(chan Event, buffer)}
+	select {
+	case h.register <- c:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out registering client")
+	}
+	return c
+}
+
+func unregisterClient(t *testing.T, h *hub, c *client) {
+	t.Helper()
+	select {
+	case h.unregister <- c:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out unregistering client")
+	}
+}
+
+func mustRecv(t *testing.T, ch <-chan Event) Event {
+	t.Helper()
+	select {
+	case ev, ok := <-ch:
+		if !ok {
+			t.Fatal("send channel closed while awaiting an event")
+		}
+		return ev
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out awaiting an event")
+		return Event{}
+	}
+}
+
+func TestHubFanOut(t *testing.T) {
+	for _, n := range []int{1, 2, 8} {
+		t.Run(fmt.Sprintf("clients=%d", n), func(t *testing.T) {
+			h := newRunningHub(t)
+			defer h.shutdown()
+
+			clients := make([]*client, n)
+			for i := range clients {
+				clients[i] = registerClient(t, h, 4)
+			}
+			ev := Event{Op: "update", Path: "notes/a.md"}
+			h.emit(ev)
+			for i, c := range clients {
+				if got := mustRecv(t, c.send); got != ev {
+					t.Fatalf("client %d got %+v, want %+v", i, got, ev)
+				}
+			}
+		})
+	}
+}
+
+func TestHubEventRoundTrip(t *testing.T) {
+	h := newRunningHub(t)
+	defer h.shutdown()
+
+	c := registerClient(t, h, 1)
+	ev := Event{Op: "move", Path: "a/b.md", NewPath: "a/c.md", Token: "tok123", Origin: "client-xyz"}
+	h.emit(ev)
+	if got := mustRecv(t, c.send); got != ev {
+		t.Fatalf("round-trip = %+v, want %+v", got, ev)
+	}
+}
+
+func TestHubDropsSlowClient(t *testing.T) {
+	h := newRunningHub(t)
+	defer h.shutdown()
+
+	healthy := registerClient(t, h, 16)
+	slow := registerClient(t, h, 1)
+
+	// broadcast is unbuffered, so each emit returns only after run() finished the prior fan-out; by the time emit("3") returns, "2" has already overflowed and dropped slow
+	h.emit(Event{Path: "1"})
+	h.emit(Event{Path: "2"})
+	h.emit(Event{Path: "3"})
+
+	for _, want := range []string{"1", "2", "3"} {
+		if got := mustRecv(t, healthy.send); got.Path != want {
+			t.Fatalf("healthy got path %q, want %q", got.Path, want)
+		}
+	}
+
+	if got, ok := <-slow.send; !ok || got.Path != "1" {
+		t.Fatalf("slow first recv = (%+v, %v), want (path 1, true)", got, ok)
+	}
+	if _, ok := <-slow.send; ok {
+		t.Fatal("slow client channel must be closed after being dropped")
+	}
+}
+
+func TestHubUnregister(t *testing.T) {
+	h := newRunningHub(t)
+	defer h.shutdown()
+
+	c1 := registerClient(t, h, 4)
+	c2 := registerClient(t, h, 4)
+
+	unregisterClient(t, h, c1)
+
+	ev := Event{Op: "update", Path: "x.md"}
+	h.emit(ev)
+
+	if got := mustRecv(t, c2.send); got != ev {
+		t.Fatalf("surviving client got %+v, want %+v", got, ev)
+	}
+	select {
+	case got, ok := <-c1.send:
+		if ok {
+			t.Fatalf("unregistered client received %+v", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("unregistered client channel was not closed")
+	}
+}
+
+func TestHubShutdown(t *testing.T) {
+	h := newRunningHub(t)
+	c := registerClient(t, h, 4)
+
+	h.shutdown()
+
+	select {
+	case _, ok := <-c.send:
+		if ok {
+			t.Fatal("shutdown must close client send channels")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("client channel not closed by shutdown")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		h.emit(Event{Path: "after-shutdown"})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("emit blocked after shutdown")
+	}
+}
+
+func TestHubConcurrent(t *testing.T) {
+	h := newRunningHub(t)
+	defer h.shutdown()
+
+	const workers = 8
+	var wg sync.WaitGroup
+
+	for i := range workers {
+		wg.Go(func() {
+			for range 100 {
+				h.emit(Event{Op: "update", Path: fmt.Sprintf("p-%d", i)})
+			}
+		})
+	}
+
+	for range workers {
+		wg.Go(func() {
+			for range 50 {
+				c := &client{send: make(chan Event, 4)}
+				select {
+				case h.register <- c:
+				case <-h.done:
+					return
+				}
+				drained := make(chan struct{})
+				go func() {
+					for range c.send {
+					}
+					close(drained)
+				}()
+				select {
+				case h.unregister <- c:
+				case <-h.done:
+				}
+				<-drained
+			}
+		})
+	}
+
+	wg.Wait()
 }
