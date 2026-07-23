@@ -318,6 +318,7 @@ async function loadFile(path, isDir = false) {
         previewMode = true;
         hideToc();
         renderDirListing(path);
+        els.previewContainer.scrollTop = 0;
         return;
     }
 
@@ -336,6 +337,7 @@ async function loadFile(path, isDir = false) {
         previewMode = true;
         hideToc();
         els.markdownBody.innerHTML = `<img src="/api/file?path=${encPath(path)}" alt="${escapeHtml(path.split('/').pop())}" style="max-width:100%; border-radius:0.5rem;">`;
+        els.previewContainer.scrollTop = 0;
         return;
     }
 
@@ -351,7 +353,9 @@ async function loadFile(path, isDir = false) {
         editorLoading = true;
         try {
             view.dispatch({
-                changes: { from: 0, to: view.state.doc.length, insert: content }
+                changes: { from: 0, to: view.state.doc.length, insert: content },
+                selection: { anchor: 0 },
+                scrollIntoView: true
             });
         } finally {
             editorLoading = false;
@@ -362,6 +366,7 @@ async function loadFile(path, isDir = false) {
         updateUnsavedIndicator();
 
         togglePreview(true);
+        els.previewContainer.scrollTop = 0;
     } catch(e) {
         if (thisLoad !== loadVersion) return;
         console.error(e);
