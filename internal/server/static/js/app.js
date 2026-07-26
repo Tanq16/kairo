@@ -269,16 +269,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     initSearch();
     await refreshTree();
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const encInitPath = urlParams.get('path');
-    if (encInitPath) {
-        const initPath = decPath(encInitPath);
-        if (initPath) {
-            const node = findNodeInTree(treeData, initPath);
-            loadFile(initPath, node ? node.isDir : false);
-        }
-    }
-
     els.fileTree.ondragover = (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
@@ -294,6 +284,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!draggedPath) return;
         await moveItem(draggedPath, draggedPath.split('/').pop());
     };
+
+    const encInitPath = new URLSearchParams(window.location.search).get('path');
+    if (encInitPath) {
+        const initPath = decPath(encInitPath);
+        if (initPath) {
+            // loadFile rewrites the URL without the fragment, so capture the anchor first
+            const initHash = window.location.hash.slice(1);
+            const node = findNodeInTree(treeData, initPath);
+            await loadFile(initPath, node ? node.isDir : false);
+            scrollToAnchor(initHash);
+        }
+    }
 });
 
 async function loadFile(path, isDir = false) {
@@ -329,20 +331,19 @@ async function loadFile(path, isDir = false) {
         return;
     }
 
-    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
-    if (imageExts.some(ext => path.toLowerCase().endsWith(ext))) {
+    if (hasExt(path, IMAGE_EXTS)) {
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.remove('hidden');
         els.previewBtn.classList.add('hidden');
         previewMode = true;
         hideToc();
-        els.markdownBody.innerHTML = `<img src="/api/file?path=${encPath(path)}" alt="${escapeHtml(path.split('/').pop())}" style="max-width:100%; border-radius:0.5rem;">`;
+        els.markdownBody.innerHTML = `<img src="${fileApiUrl(path)}" alt="${escapeHtml(path.split('/').pop())}" style="max-width:100%; border-radius:0.5rem;">`;
         els.previewContainer.scrollTop = 0;
         return;
     }
 
     try {
-        const res = await fetch(`/api/file?path=${encPath(path)}`);
+        const res = await fetch(fileApiUrl(path));
         if (thisLoad !== loadVersion) return;
         if (!res.ok) throw new Error('Failed to load');
         currentFileToken = res.headers.get('X-Kairo-Version');
@@ -386,12 +387,9 @@ function renderDirListing(path) {
     ((node && node.children) || []).forEach(c => {
         const li = document.createElement('li');
         const a = document.createElement('a');
-        a.href = `?path=${encPath(c.path)}${c.isDir ? '&dir=1' : ''}`;
+        a.href = `?path=${encPath(c.path)}`;
+        a.dataset.kairoPath = c.path;
         a.textContent = c.name;
-        a.addEventListener('click', e => {
-            e.preventDefault();
-            loadFile(c.path, c.isDir);
-        });
         li.appendChild(a);
         ul.appendChild(li);
     });
@@ -525,6 +523,7 @@ async function moveItem(oldPath, newPath) {
 }
 
 function initEventListeners() {
+    initLinkNavigation();
     els.previewBtn.addEventListener('click', () => togglePreview());
     els.themeToggle.addEventListener('click', toggleTheme);
     if (els.printBtn) {
