@@ -32,7 +32,7 @@ function onSyncEvent(e) {
             rebasePendingSaves(ev.path, ev.newPath);
             // treeData still holds the pre-move node (refresh is debounced), so the open path's own type carries the move
             const node = findNodeInTree(treeData, currentPath);
-            loadFile(rebased, node ? node.isDir : false);
+            loadFile(rebased, node ? node.isDir : false, { nav: 'replace' });
         }
         return;
     }
@@ -41,7 +41,7 @@ function onSyncEvent(e) {
         discardPendingSave(ev.path);
         if (currentPath && (currentPath === ev.path || currentPath.startsWith(ev.path + '/'))) {
             showToast('This note was deleted on another device', 'warning');
-            goHome();
+            goHome('replace');
         }
         return;
     }

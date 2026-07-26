@@ -75,7 +75,22 @@ func (s *Server) Setup() error {
 
 	s.mux.HandleFunc("/", s.handleIndex)
 
+	warnReservedNames(s.config.DataDir)
+
 	return nil
+}
+
+// Notes are addressed by URL path, so a top-level entry named after a real route is reachable from the file tree but never from its own URL
+func warnReservedNames(dataDir string) {
+	entries, err := os.ReadDir(dataDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if name := e.Name(); name == "api" || name == "static" {
+			log.Printf("WARN Top-level %q shadows a server route; notes under it open from the file tree but their URLs will not load directly", name)
+		}
+	}
 }
 
 func (s *Server) Run() error {

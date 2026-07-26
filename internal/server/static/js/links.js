@@ -1,4 +1,4 @@
-// Resolves note-relative markdown link and image targets into note-root paths for ?path= navigation and the file API; globals come from app.js (no imports in this file)
+// Classifies markdown link and image targets the browser has already resolved against the note's URL; globals come from app.js (no imports in this file)
 
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
 const NOTE_EXTS = ['.md', '.markdown', '.txt'];
@@ -8,66 +8,32 @@ function hasExt(path, exts) {
     return exts.some(ext => lower.endsWith(ext));
 }
 
-function isExternalHref(href) {
-    return /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('//');
-}
-
-function splitHash(href) {
-    const i = href.indexOf('#');
-    return i === -1 ? { target: href, hash: '' } : { target: href.slice(0, i), hash: href.slice(i + 1) };
-}
-
-// null when the path climbs above the note root, which the API rejects outright
-function normalizePath(path) {
-    const parts = [];
-    for (const seg of path.split('/')) {
-        if (!seg || seg === '.') continue;
-        if (seg === '..') {
-            if (!parts.length) return null;
-            parts.pop();
-            continue;
-        }
-        parts.push(seg);
-    }
-    return parts.join('/');
-}
-
 function basename(path) {
     return path.slice(path.lastIndexOf('/') + 1);
 }
 
-function linkCandidates(basePath, target) {
-    if (!target || isExternalHref(target)) return [];
-    let decoded = target;
-    // Links are percent-encoded but files are stored raw (literal-% legacy links keep their raw form)
-    try { decoded = decodeURIComponent(target); } catch (e) {}
-
-    let joined;
-    if (decoded.startsWith('/')) {
-        joined = decoded.slice(1);
-    } else {
-        const baseDir = basePath ? basePath.slice(0, basePath.lastIndexOf('/') + 1) : '';
-        joined = baseDir + decoded;
-    }
-
-    const primary = normalizePath(joined);
-    if (!primary) return [];
-
-    const candidates = [primary];
-    // Obsidian vaults link to notes without the extension
-    if (!basename(primary).includes('.')) candidates.push(primary + '.md');
-    // legacy Kairo attachment links are absolute against the data dir, which is itself the note root
-    if (primary.startsWith('data/')) candidates.push(primary.slice(5));
-    return candidates;
+// The document URL is the note path, so relative, root-absolute and percent-encoded targets all normalize here for free
+function linkTarget(href) {
+    if (!href || !href.trim()) return null;
+    let url;
+    try { url = new URL(href, document.baseURI); } catch (e) { return null; }
+    if (url.origin !== window.location.origin) return null;
+    // Rewritten image sources are same-origin, so a second pass would otherwise re-resolve them as note paths
+    if (url.pathname === '/api/file') return null;
+    return { path: urlPath(url.pathname), hash: decodeSegment(url.hash.slice(1)) };
 }
 
-function resolveLink(basePath, target) {
-    const candidates = linkCandidates(basePath, target);
-    for (const path of candidates) {
-        const node = findNodeInTree(treeData, path);
-        if (node) return { path, node };
+function resolveLink(path) {
+    const candidates = [path];
+    // Obsidian vaults link to notes without the extension
+    if (!basename(path).includes('.')) candidates.push(path + '.md');
+    // legacy Kairo attachment links are absolute against the data dir, which is itself the note root
+    if (path.startsWith('data/')) candidates.push(path.slice(5));
+    for (const p of candidates) {
+        const node = findNodeInTree(treeData, p);
+        if (node) return { path: p, node };
     }
-    return candidates.length ? { path: candidates[0], node: null } : null;
+    return { path, node: null };
 }
 
 function fileApiUrl(path) {
@@ -83,27 +49,24 @@ function opensInApp(path, isDir) {
 
 function fixImagePaths() {
     els.markdownBody.querySelectorAll('img').forEach(img => {
-        const src = img.getAttribute('src');
-        if (!src || isExternalHref(src)) return;
-        const resolved = resolveLink(currentPath, src);
-        if (resolved) img.src = fileApiUrl(resolved.path);
+        const target = linkTarget(img.getAttribute('src'));
+        if (!target || !target.path) return;
+        img.src = fileApiUrl(resolveLink(target.path).path);
     });
 }
 
 function fixLinks() {
     els.markdownBody.querySelectorAll('a[href]').forEach(a => {
-        const href = a.getAttribute('href');
-        if (!href || isExternalHref(href)) return;
-
-        const { target, hash } = splitHash(href);
-        if (hash) a.dataset.kairoHash = hash;
+        const target = linkTarget(a.getAttribute('href'));
         if (!target) return;
+        if (target.hash) a.dataset.kairoHash = target.hash;
+        // an empty path is a link to the app root, which the browser can follow natively
+        if (!target.path) return;
 
-        const resolved = resolveLink(currentPath, target);
-        // a target that climbs out of the note root is still claimed, so the click reports a dead link instead of navigating away from the app
-        a.dataset.kairoPath = resolved ? resolved.path : target;
-        a.classList.toggle('kairo-missing', !resolved?.node);
-        if (resolved) a.href = `?path=${encPath(resolved.path)}${hash ? '#' + hash : ''}`;
+        const resolved = resolveLink(target.path);
+        a.dataset.kairoPath = resolved.path;
+        a.classList.toggle('kairo-missing', !resolved.node);
+        a.href = pathUrl(resolved.path, target.hash);
     });
 }
 
@@ -130,7 +93,7 @@ async function openLinkTarget(path, hash) {
         window.open(fileApiUrl(path), '_blank', 'noopener');
         return;
     }
-    await loadFile(path, node.isDir);
+    await loadFile(path, node.isDir, { hash });
     scrollToAnchor(hash);
 }
 
