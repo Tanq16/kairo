@@ -230,23 +230,10 @@ function wrapTables() {
     });
 }
 
-function fixImagePaths() {
-    els.markdownBody.querySelectorAll('img').forEach(img => {
-        let src = img.getAttribute('src');
-        if (src && !src.startsWith('http') && !src.startsWith('data:')) {
-            // Links are percent-encoded but files are stored raw, so decode before the API (literal-% legacy links keep their raw form)
-            try { src = decodeURIComponent(src); } catch (e) {}
-            // Relative markdown paths resolve against the note's directory, served via the file API
-            const currentDir = currentPath ? currentPath.substring(0, currentPath.lastIndexOf('/')) : '';
-            const fullPath = currentDir ? (currentDir + '/' + src) : src;
-            img.src = `/api/file?path=${encPath(fullPath)}`;
-        }
-    });
-}
-
 function renderMarkdownBody(content) {
     els.markdownBody.innerHTML = DOMPurify.sanitize(marked.parse(content));
     fixImagePaths();
+    fixLinks();
     wrapTables();
     addCopyButtons();
     queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
