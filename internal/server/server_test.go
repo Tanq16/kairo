@@ -1,12 +1,15 @@
 package server
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -15,31 +18,165 @@ import (
 	"github.com/tanq16/kairo/internal/notes"
 )
 
-func TestDecodeBase64Path(t *testing.T) {
-	// "???" forces alphabet-distinguishing output ("Pz8_" raw-URL vs "Pz8/" std)
+func TestLegacyBase64Path(t *testing.T) {
+	// "dir/note~1.md" encodes to "...dV+MS5tZA==" under the standard alphabet and "...dV-MS5tZA" under the URL one, so it tells the three decoders apart
+	const alphabetProbe = "dir/note~1.md"
 	tests := []struct {
-		name    string
-		in      string
-		want    string
-		wantErr bool
+		name string
+		in   string
+		want string
+		ok   bool
 	}{
-		{"empty passthrough", "", "", false},
-		{"raw URL", base64.RawURLEncoding.EncodeToString([]byte("???")), "???", false},
-		{"padded URL", base64.URLEncoding.EncodeToString([]byte("a")), "a", false},
-		{"standard", base64.StdEncoding.EncodeToString([]byte("???")), "???", false},
-		{"plain path", base64.RawURLEncoding.EncodeToString([]byte("dir/note.md")), "dir/note.md", false},
-		{"garbage", "!!!not-base64!!!", "", true},
+		{"empty is not a legacy path", "", "", false},
+		{"raw URL", base64.RawURLEncoding.EncodeToString([]byte(alphabetProbe)), alphabetProbe, true},
+		{"padded URL", base64.URLEncoding.EncodeToString([]byte(alphabetProbe)), alphabetProbe, true},
+		{"standard", base64.StdEncoding.EncodeToString([]byte(alphabetProbe)), alphabetProbe, true},
+		{"plain path", base64.RawURLEncoding.EncodeToString([]byte("dir/note.md")), "dir/note.md", true},
+		{"garbage", "!!!not-base64!!!", "", false},
+		// an extension-less note name is itself valid base64, and must not be mistaken for an encoded path
+		{"decodes to a name that could not be a path", base64.RawURLEncoding.EncodeToString([]byte("notes")), "", false},
+		{"decodes to binary junk", "Projects", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := decodeBase64Path(tt.in)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("decodeBase64Path(%q) err = %v, wantErr %v", tt.in, err, tt.wantErr)
+			got, ok := legacyBase64Path(tt.in)
+			if ok != tt.ok {
+				t.Fatalf("legacyBase64Path(%q) ok = %v, want %v", tt.in, ok, tt.ok)
 			}
 			if got != tt.want {
-				t.Fatalf("decodeBase64Path(%q) = %q, want %q", tt.in, got, tt.want)
+				t.Fatalf("legacyBase64Path(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func newTestServer(t *testing.T) *Server {
+	t.Helper()
+	s := New(Config{DataDir: t.TempDir()})
+	if err := s.Setup(); err != nil {
+		t.Fatalf("Setup: %v", err)
+	}
+	t.Cleanup(s.hub.shutdown)
+	return s
+}
+
+func saveNote(t *testing.T, s *Server, notePath, content string) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(notes.SaveRequest{Path: notePath, Content: content})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/save", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Kairo-Wire", wireVersion)
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestAPIPathRoundTrip(t *testing.T) {
+	// the wire carries plain paths now, so every character the query encoder touches has to survive the trip back
+	paths := []string{
+		"note.md",
+		"dir/a b.md",
+		"a+b.md",
+		"50% off.md",
+		"we#ird.md",
+		"q?uery.md",
+		"amp&equals=.md",
+		"ünïcode ✅.md",
+		"dir/sub/deep name.md",
+	}
+	for _, notePath := range paths {
+		t.Run(notePath, func(t *testing.T) {
+			s := newTestServer(t)
+			content := "body of " + notePath
+			if rec := saveNote(t, s, notePath, content); rec.Code != http.StatusOK {
+				t.Fatalf("save %q status = %d, body %q", notePath, rec.Code, rec.Body)
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/api/file?path="+url.QueryEscape(notePath), nil)
+			rec := httptest.NewRecorder()
+			s.mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("read %q status = %d, body %q", notePath, rec.Code, rec.Body)
+			}
+			if rec.Body.String() != content {
+				t.Fatalf("read %q = %q, want %q", notePath, rec.Body, content)
+			}
+		})
+	}
+}
+
+func TestHandleFileLegacyBase64URL(t *testing.T) {
+	// URLs the app handed out before paths went plain are still pasted and bookmarked
+	s := newTestServer(t)
+	if rec := saveNote(t, s, "dir/note.md", "legacy"); rec.Code != http.StatusOK {
+		t.Fatalf("save status = %d", rec.Code)
+	}
+
+	encoded := base64.RawURLEncoding.EncodeToString([]byte("dir/note.md"))
+	req := httptest.NewRequest(http.MethodGet, "/api/file?path="+encoded, nil)
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "legacy" {
+		t.Fatalf("legacy read = %d %q, want 200 %q", rec.Code, rec.Body, "legacy")
+	}
+
+	// a plain path that simply does not exist must stay a 404, not fall through to a decoded guess
+	if rec := saveNote(t, s, "notes", "a note with no extension"); rec.Code != http.StatusOK {
+		t.Fatalf("save status = %d", rec.Code)
+	}
+	for _, missing := range []string{"missing.md", base64.RawURLEncoding.EncodeToString([]byte("notes"))} {
+		req := httptest.NewRequest(http.MethodGet, "/api/file?path="+url.QueryEscape(missing), nil)
+		rec := httptest.NewRecorder()
+		s.mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("missing path %q status = %d, want 404", missing, rec.Code)
+		}
+	}
+}
+
+func TestRequireWireRejectsStaleClient(t *testing.T) {
+	// a pre-upgrade tab sends a base64 path, which is a legal filename and would otherwise be written verbatim
+	s := newTestServer(t)
+	stale := base64.RawURLEncoding.EncodeToString([]byte("note.md"))
+	body, err := json.Marshal(notes.SaveRequest{Path: stale, Content: "edit from a stale tab"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	for _, tt := range []struct {
+		name string
+		url  string
+		hdr  string
+		want int
+	}{
+		{"no marker", "/api/save", "", http.StatusBadRequest},
+		{"wrong marker", "/api/save", "1", http.StatusBadRequest},
+		{"header marker", "/api/save", wireVersion, http.StatusOK},
+		{"beacon query marker", "/api/save?wire=" + wireVersion, "", http.StatusOK},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tt.url, bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			if tt.hdr != "" {
+				req.Header.Set("X-Kairo-Wire", tt.hdr)
+			}
+			rec := httptest.NewRecorder()
+			s.mux.ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status = %d, want %d", rec.Code, tt.want)
+			}
+		})
+	}
+
+	// reads are never gated: a stale tab must still be able to load what it is showing
+	req := httptest.NewRequest(http.MethodGet, "/api/tree", nil)
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/tree status = %d, want 200", rec.Code)
 	}
 }
 

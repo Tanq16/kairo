@@ -63,12 +63,12 @@ func (s *Server) Setup() error {
 	apiMux.HandleFunc("GET /api/tree", s.handleTree)
 	apiMux.HandleFunc("GET /api/file", s.handleFile)
 	apiMux.HandleFunc("GET /api/search", s.handleSearch)
-	apiMux.HandleFunc("POST /api/save", s.handleSave)
-	apiMux.HandleFunc("POST /api/create-file", s.handleCreateFile)
-	apiMux.HandleFunc("POST /api/create-dir", s.handleCreateDir)
-	apiMux.HandleFunc("POST /api/delete", s.handleDelete)
-	apiMux.HandleFunc("POST /api/move", s.handleMove)
-	apiMux.HandleFunc("POST /api/upload", s.handleUpload)
+	apiMux.HandleFunc("POST /api/save", requireWire(s.handleSave))
+	apiMux.HandleFunc("POST /api/create-file", requireWire(s.handleCreateFile))
+	apiMux.HandleFunc("POST /api/create-dir", requireWire(s.handleCreateDir))
+	apiMux.HandleFunc("POST /api/delete", requireWire(s.handleDelete))
+	apiMux.HandleFunc("POST /api/move", requireWire(s.handleMove))
+	apiMux.HandleFunc("POST /api/upload", requireWire(s.handleUpload))
 	apiMux.HandleFunc("GET /api/events", s.handleEvents)
 	apiMux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.Handle("/api/", apiMux)
@@ -78,6 +78,20 @@ func (s *Server) Setup() error {
 	warnReservedNames(s.config.DataDir)
 
 	return nil
+}
+
+const wireVersion = "2"
+
+// A tab still running the pre-plain-path client sends base64, which is itself a legal filename and would be written verbatim to a junk path; refusing the write turns silent corruption into the save failure the client already knows how to surface
+func requireWire(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// sendBeacon can't set headers, so the marker rides as a query param there
+		if r.Header.Get("X-Kairo-Wire") != wireVersion && r.URL.Query().Get("wire") != wireVersion {
+			http.Error(w, "Outdated client, please reload the page", http.StatusBadRequest)
+			return
+		}
+		next(w, r)
+	}
 }
 
 // Notes are addressed by URL path, so a top-level entry named after a real route is reachable from the file tree but never from its own URL

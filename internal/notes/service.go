@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -28,11 +29,29 @@ func (s *Service) GetFile(path string) ([]byte, error) {
 	return s.storage.ReadFile(path)
 }
 
-func (s *Service) SaveFile(path string, content string) error {
-	return s.storage.SaveFile(path, []byte(content))
+// A note is addressed by its URL path, and /api and /static are real server routes, so a note below a top-level directory of that name would have no loadable URL. Only minting a new one is refused: a vault that already contains one keeps working, since every write below it creates the parent chain.
+func (s *Service) checkReserved(p string) error {
+	first, _, _ := strings.Cut(path.Clean(p), "/")
+	if first != "api" && first != "static" {
+		return nil
+	}
+	if exists, err := s.storage.Exists(first); err == nil && exists {
+		return nil
+	}
+	return ErrReservedPath
+}
+
+func (s *Service) SaveFile(p string, content string) error {
+	if err := s.checkReserved(p); err != nil {
+		return err
+	}
+	return s.storage.SaveFile(p, []byte(content))
 }
 
 func (s *Service) CreateFile(p, content string) (string, error) {
+	if err := s.checkReserved(p); err != nil {
+		return "", err
+	}
 	ext := path.Ext(p)
 	stem := strings.TrimSuffix(p, ext)
 	// mirror UploadFile: suffix "-(N)" before the extension so a create never overwrites an existing file
@@ -51,8 +70,11 @@ func (s *Service) CreateFile(p, content string) (string, error) {
 	}
 }
 
-func (s *Service) CreateDir(path string) error {
-	return s.storage.CreateDir(path)
+func (s *Service) CreateDir(p string) error {
+	if err := s.checkReserved(p); err != nil {
+		return err
+	}
+	return s.storage.CreateDir(p)
 }
 
 func (s *Service) Delete(filePath string) error {
@@ -67,6 +89,9 @@ func (s *Service) Delete(filePath string) error {
 }
 
 func (s *Service) Move(oldPath, newPath string) error {
+	if err := s.checkReserved(newPath); err != nil {
+		return err
+	}
 	oldDir := path.Dir(oldPath)
 	newDir := path.Dir(newPath)
 
@@ -88,6 +113,45 @@ func (s *Service) Move(oldPath, newPath string) error {
 
 var mdImageRe = regexp.MustCompile(`(!\[[^\]]*\]\()([^)]+)(\))`)
 var htmlImageRe = regexp.MustCompile(`(<img[^>]+src=["'])([^"']+)(["'][^>]*>)`)
+
+// A segment that fails to decode is kept verbatim, matching how the browser treats a stray '%' in a filename
+func unescapeLink(src string) string {
+	segments := strings.Split(src, "/")
+	for i, seg := range segments {
+		if decoded, err := url.PathUnescape(seg); err == nil {
+			segments[i] = decoded
+		}
+	}
+	return strings.Join(segments, "/")
+}
+
+func escapeLink(name string) string {
+	segments := strings.Split(name, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+	return strings.Join(segments, "/")
+}
+
+// The prefix test proves the source sits under the attachments directory; only a name that climbs back out can make the destination leave it
+func attachmentFileName(name string) (string, bool) {
+	clean := path.Clean(name)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
+		return "", false
+	}
+	return clean, true
+}
+
+// The bool reports a legacy /data/ link, which is the only form whose text gets rewritten on a move
+func attachmentPath(src, oldDir string) (string, bool) {
+	if legacy, ok := strings.CutPrefix(src, "/data/"); ok {
+		return legacy, true
+	}
+	if oldDir == "." {
+		return src, false
+	}
+	return oldDir + "/" + src, false
+}
 
 func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 	content, err := s.storage.ReadFile(notePath)
@@ -113,22 +177,18 @@ func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 			return match
 		}
 
-		var dataRelPath string
-		if strings.HasPrefix(src, "/data/") {
-			dataRelPath = strings.TrimPrefix(src, "/data/")
-		} else {
-			if oldDir == "." {
-				dataRelPath = src
-			} else {
-				dataRelPath = oldDir + "/" + src
-			}
-		}
+		// The link is percent-encoded but the file on disk is not, so an attachment named with a space or a '#' is only found once the escapes are undone
+		dataRelPath, viaDataPrefix := attachmentPath(unescapeLink(src), oldDir)
 
-		if !strings.HasPrefix(dataRelPath, oldAttPrefix) {
+		rest, underAttachments := strings.CutPrefix(dataRelPath, oldAttPrefix)
+		if !underAttachments {
+			return match
+		}
+		fileName, ok := attachmentFileName(rest)
+		if !ok {
 			return match
 		}
 
-		fileName := strings.TrimPrefix(dataRelPath, oldAttPrefix)
 		var newDataRelPath string
 		if newDir == "." {
 			newDataRelPath = "attachments/" + fileName
@@ -147,9 +207,9 @@ func (s *Service) moveAttachments(notePath, oldDir, newDir string) error {
 			}
 		}
 
-		if strings.HasPrefix(src, "/data/") {
+		if viaDataPrefix {
 			if _, ok := moved[dataRelPath]; ok {
-				return pre + "attachments/" + fileName + post
+				return pre + "attachments/" + escapeLink(fileName) + post
 			}
 		}
 
@@ -196,7 +256,11 @@ func (s *Service) cleanupEmptyAttachmentsDir(dir string) {
 }
 
 func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (string, error) {
+	// the attachment lands beside the note, so the directory is what has to clear the reservation
 	dir := path.Dir(notePath)
+	if err := s.checkReserved(dir); err != nil {
+		return "", err
+	}
 	base := time.Now().Format("20060102_150405") + "_" + path.Base(filename)
 	ext := path.Ext(base)
 	stem := strings.TrimSuffix(base, ext)

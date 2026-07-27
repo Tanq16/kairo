@@ -344,11 +344,13 @@ func TestServiceMoveRewritesAttachments(t *testing.T) {
 		"![web](http://example.com/x.png)",
 		"![inline](data:image/png;base64,AAAA)",
 		"![ghost](/data/a/attachments/ghost.png)",
+		"![esc](/data/a/attachments/four%20%234.png)",
 	}, "\n")
 	writeFile(t, s, "a/note.md", content)
 	writeFile(t, s, "a/attachments/one.png", "1")
 	writeFile(t, s, "a/attachments/two.png", "2")
 	writeFile(t, s, "a/attachments/three.png", "3")
+	writeFile(t, s, "a/attachments/four #4.png", "4")
 
 	if err := svc.Move("a/note.md", "b/note.md"); err != nil {
 		t.Fatalf("Move: %v", err)
@@ -365,13 +367,14 @@ func TestServiceMoveRewritesAttachments(t *testing.T) {
 		"![web](http://example.com/x.png)",
 		"![inline](data:image/png;base64,AAAA)",
 		"![ghost](/data/a/attachments/ghost.png)",
+		"![esc](attachments/four%20%234.png)",
 	}
 	if got := strings.Split(string(moved), "\n"); !slices.Equal(got, want) {
 		t.Fatalf("rewritten note:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 
 	mustExist(t, s, "a/note.md", false)
-	for _, p := range []string{"b/attachments/one.png", "b/attachments/two.png", "b/attachments/three.png"} {
+	for _, p := range []string{"b/attachments/one.png", "b/attachments/two.png", "b/attachments/three.png", "b/attachments/four #4.png"} {
 		mustExist(t, s, p, true)
 	}
 	if _, err := os.Stat(filepath.Join(s.dataDir, "a", "attachments")); !errors.Is(err, os.ErrNotExist) {
@@ -582,4 +585,139 @@ func findChild(t *testing.T, n *FileNode, name string) *FileNode {
 	}
 	t.Fatalf("child %q not found under %q (have %v)", name, n.Name, childNames(n))
 	return nil
+}
+
+func TestReservedTopLevel(t *testing.T) {
+	// "api" and "static" are server routes: minting one is refused, but an existing one must stay fully usable
+	tests := []struct {
+		name     string
+		seed     string
+		path     string
+		reserved bool
+	}{
+		{"reserved dir", "", "api/note.md", true},
+		{"reserved dir static", "", "static/note.md", true},
+		{"reserved name itself", "", "api", true},
+		{"dot-slash normalizes to reserved", "", "./api/note.md", true},
+		{"traversal normalizes to reserved", "", "zz/../api/note.md", true},
+		{"double slash normalizes to reserved", "", "api//note.md", true},
+		{"trailing slash normalizes to reserved", "", "api/", true},
+		{"existing reserved dir stays writable", "api/seed.md", "api/note.md", false},
+		{"prefix only", "", "apiary/note.md", false},
+		{"file with reserved stem", "", "api.md", false},
+		{"nested is not top level", "", "docs/api/note.md", false},
+		{"case differs from the route", "", "API/note.md", false},
+		{"ordinary path", "", "README.md", false},
+		{"empty path", "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStorage(t)
+			svc := NewService(s)
+			if tt.seed != "" {
+				writeFile(t, s, tt.seed, "seed")
+			}
+			if got := errors.Is(svc.checkReserved(tt.path), ErrReservedPath); got != tt.reserved {
+				t.Fatalf("checkReserved(%q) reserved = %v, want %v", tt.path, got, tt.reserved)
+			}
+		})
+	}
+}
+
+func TestReservedTopLevelAcrossEntryPoints(t *testing.T) {
+	// every write creates its parent chain, so each of these mints a top-level directory on its own
+	s := newTestStorage(t)
+	svc := NewService(s)
+	writeFile(t, s, "note.md", "body")
+
+	if _, err := svc.CreateFile("api/new.md", "x"); !errors.Is(err, ErrReservedPath) {
+		t.Fatalf("CreateFile err = %v, want ErrReservedPath", err)
+	}
+	if err := svc.CreateDir("static"); !errors.Is(err, ErrReservedPath) {
+		t.Fatalf("CreateDir err = %v, want ErrReservedPath", err)
+	}
+	if err := svc.Move("note.md", "api/note.md"); !errors.Is(err, ErrReservedPath) {
+		t.Fatalf("Move err = %v, want ErrReservedPath", err)
+	}
+	if err := svc.SaveFile("api/note.md", "x"); !errors.Is(err, ErrReservedPath) {
+		t.Fatalf("SaveFile err = %v, want ErrReservedPath", err)
+	}
+	if _, err := svc.UploadFile("api/note.md", strings.NewReader("x"), "f.png"); !errors.Is(err, ErrReservedPath) {
+		t.Fatalf("UploadFile err = %v, want ErrReservedPath", err)
+	}
+	// the attachment goes next to the note, so the note path itself can normalize away while its directory does not
+	if _, err := svc.UploadFile("api/..", strings.NewReader("x"), "f.png"); !errors.Is(err, ErrReservedPath) {
+		t.Fatalf("UploadFile into a normalizing path err = %v, want ErrReservedPath", err)
+	}
+	mustExist(t, s, "api", false)
+	mustExist(t, s, "static", false)
+
+	// a vault that predates the reservation keeps working, including renames inside it and moves back into it
+	writeFile(t, s, "api/legacy.md", "old")
+	if err := svc.Move("api/legacy.md", "api/renamed.md"); err != nil {
+		t.Fatalf("rename inside an existing reserved dir: %v", err)
+	}
+	if err := svc.Move("api/renamed.md", "out.md"); err != nil {
+		t.Fatalf("move out of an existing reserved dir: %v", err)
+	}
+	if err := svc.Move("out.md", "api/back.md"); err != nil {
+		t.Fatalf("move back into an existing reserved dir: %v", err)
+	}
+	if err := svc.SaveFile("api/back.md", "edited"); err != nil {
+		t.Fatalf("save inside an existing reserved dir: %v", err)
+	}
+}
+
+func TestMoveAttachmentsEscapedNames(t *testing.T) {
+	// the link is percent-encoded, the file on disk is not; a mismatch silently orphans the attachment
+	tests := []struct {
+		name     string
+		fileName string
+		link     string
+	}{
+		{"space", "a b.png", "attachments/a%20b.png"},
+		{"hash", "fig#3.png", "attachments/fig%233.png"},
+		{"question mark", "q?.png", "attachments/q%3F.png"},
+		{"unicode", "ünï.png", "attachments/%C3%BCn%C3%AF.png"},
+		{"plain name", "plain.png", "attachments/plain.png"},
+		{"literal percent in the name", "50%25 off.png", "attachments/50%2525%20off.png"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStorage(t)
+			svc := NewService(s)
+			writeFile(t, s, "src/attachments/"+tt.fileName, "img")
+			writeFile(t, s, "src/note.md", "![a]("+tt.link+")")
+
+			if err := svc.Move("src/note.md", "dst/note.md"); err != nil {
+				t.Fatalf("Move: %v", err)
+			}
+			mustExist(t, s, "dst/attachments/"+tt.fileName, true)
+			mustExist(t, s, "src/attachments/"+tt.fileName, false)
+
+			got, err := s.ReadFile("dst/note.md")
+			if err != nil {
+				t.Fatalf("ReadFile: %v", err)
+			}
+			// the link is relative to the note's directory, so it must survive the move unchanged
+			if string(got) != "![a]("+tt.link+")" {
+				t.Fatalf("note body = %q, want the link left intact", got)
+			}
+		})
+	}
+}
+
+func TestMoveAttachmentsRefusesEscapedTraversal(t *testing.T) {
+	// %2F decodes to a real separator, which would let a link reach a file outside the attachments directory
+	s := newTestStorage(t)
+	svc := NewService(s)
+	writeFile(t, s, "src/secret.md", "private")
+	writeFile(t, s, "src/note.md", "![a](attachments/..%2Fsecret.md)")
+
+	if err := svc.Move("src/note.md", "dst/note.md"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+	mustExist(t, s, "src/secret.md", true)
+	mustExist(t, s, "dst/secret.md", false)
+	mustExist(t, s, "dst/attachments/secret.md", false)
 }

@@ -78,15 +78,15 @@ const KAIRO_CLIENT = (() => {
     return `${h[0]}${h[1]}${h[2]}${h[3]}-${h[4]}${h[5]}-${h[6]}${h[7]}-${h[8]}${h[9]}-${h.slice(10).join('')}`;
 })();
 
-function encPath(path) {
-    if (!path) return '';
-    const bytes = new TextEncoder().encode(path);
-    let bin = '';
-    for (const b of bytes) bin += String.fromCharCode(b);
-    // Use URL-safe Base64 without padding to match Go's decoder
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+// Lets the server reject a tab still running the pre-plain-path client instead of writing its base64 path verbatim
+const KAIRO_WIRE = '2';
+const writeHeaders = { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE };
+
+function encodeSegments(path) {
+    return path.split('/').map(encodeURIComponent).join('/');
 }
 
+// The wire carries plain paths now; this only reads a legacy /?path=<base64> browser URL
 function decPath(encoded) {
     if (!encoded) return '';
     try {
@@ -106,7 +106,7 @@ function decodeSegment(seg) {
 }
 
 function pathUrl(path, hash = '') {
-    const url = path ? '/' + path.split('/').map(encodeURIComponent).join('/') : '/';
+    const url = path ? '/' + encodeSegments(path) : '/';
     return hash ? url + '#' + encodeURIComponent(hash) : url;
 }
 
@@ -135,6 +135,11 @@ function showToast(message, type = 'info') {
     toast.classList.remove('hidden');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.add('hidden'), 3000);
+}
+
+// writeServiceError sends a specific reason (reserved name, destination exists) that a bare status code cannot carry
+async function toastServerError(res, fallback) {
+    showToast((await res.text()).trim() || fallback, 'error');
 }
 
 function saveExpandedFolders() {
@@ -524,11 +529,11 @@ async function moveItem(oldPath, newPath) {
     try {
         const res = await fetch('/api/move', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
-            body: JSON.stringify({ path: encPath(oldPath), newPath: encPath(newPath) })
+            headers: writeHeaders,
+            body: JSON.stringify({ path: oldPath, newPath })
         });
         if (!res.ok) {
-            showToast(res.status === 409 ? 'Destination already exists' : 'Failed to move', 'error');
+            await toastServerError(res, 'Failed to move');
             return false;
         }
         rebasePendingSaves(oldPath, newPath);
@@ -643,20 +648,20 @@ function initEventListeners() {
             if (createMode === 'folder') {
                 const res = await fetch('/api/create-dir', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
-                    body: JSON.stringify({ path: encPath(path) })
+                    headers: writeHeaders,
+                    body: JSON.stringify({ path })
                 });
-                if (!res.ok) throw new Error('create failed: ' + res.status);
+                if (!res.ok) return await toastServerError(res, 'Failed to create');
                 els.createModal.backdrop.classList.add('hidden');
                 await refreshTree();
             } else {
                 if(!path.endsWith('.md')) path += '.md';
                 const res = await fetch('/api/create-file', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
-                    body: JSON.stringify({ path: encPath(path), content: '# ' + val.replace(/\.md$/, '') })
+                    headers: writeHeaders,
+                    body: JSON.stringify({ path, content: '# ' + val.replace(/\.md$/, '') })
                 });
-                if (!res.ok) throw new Error('create failed: ' + res.status);
+                if (!res.ok) return await toastServerError(res, 'Failed to create');
                 // Server may suffix the name on collision, so open whatever path it actually created
                 const finalPath = await res.text();
                 els.createModal.backdrop.classList.add('hidden');
@@ -729,8 +734,8 @@ function initEventListeners() {
         try {
             const res = await fetch('/api/delete', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
-                body: JSON.stringify({ path: encPath(currentPath) })
+                headers: writeHeaders,
+                body: JSON.stringify({ path: currentPath })
             });
             if (!res.ok) throw new Error('delete failed: ' + res.status);
             els.deleteModal.backdrop.classList.add('hidden');

@@ -57,7 +57,7 @@ async function applyRemote(path) {
         return;
     }
     try {
-        const res = await fetch(`/api/file?path=${encPath(path)}`);
+        const res = await fetch(fileApiUrl(path));
         if (!res.ok || path !== currentPath) return;
         const token = res.headers.get('X-Kairo-Version');
         const content = await res.text();

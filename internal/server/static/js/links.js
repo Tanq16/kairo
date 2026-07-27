@@ -37,7 +37,7 @@ function resolveLink(path) {
 }
 
 function fileApiUrl(path) {
-    return `/api/file?path=${encPath(path)}`;
+    return `/api/file?path=${encodeURIComponent(path)}`;
 }
 
 // anything the editor and the image viewer don't cover is served raw, so a PDF opens in the browser instead of landing in CodeMirror as bytes

@@ -7,8 +7,9 @@ import (
 
 // Sentinels let handlers map storage failures to HTTP statuses without leaking paths.
 var (
-	ErrInvalidPath = errors.New("invalid path")
-	ErrExists      = errors.New("destination already exists")
+	ErrInvalidPath  = errors.New("invalid path")
+	ErrExists       = errors.New("destination already exists")
+	ErrReservedPath = errors.New("reserved name")
 )
 
 type FileNode struct {
