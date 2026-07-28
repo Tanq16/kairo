@@ -130,10 +130,10 @@ async function drainPendingSaves() {
             const content = pendingSaves.get(path);
             if (content === undefined) continue; // dropped by a concurrent move/discard
             try {
-                const res = await fetch('/api/save', {
+                const res = await fetch(`${KAIRO_ROUTES}/api/save`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
-                    body: JSON.stringify({ path: encPath(path), content })
+                    headers: writeHeaders,
+                    body: JSON.stringify({ path, content })
                 });
                 if (!res.ok) throw new Error('save failed: ' + res.status);
                 saveFailed = false;
@@ -187,13 +187,13 @@ window.addEventListener('beforeunload', () => {
     if (pendingSaves.size === 0) return;
     clearTimeout(saveTimer);
     for (const [path, content] of pendingSaves) {
-        const body = JSON.stringify({ path: encPath(path), content });
+        const body = JSON.stringify({ path, content });
         // sendBeacon survives page unload; keepalive fetch is the fallback
         if (navigator.sendBeacon) {
             // sendBeacon can't set headers, so the client id rides as a query param for echo suppression
-            navigator.sendBeacon('/api/save?client=' + encodeURIComponent(KAIRO_CLIENT), new Blob([body], { type: 'application/json' }));
+            navigator.sendBeacon(`${KAIRO_ROUTES}/api/save?client=${encodeURIComponent(KAIRO_CLIENT)}&wire=${KAIRO_WIRE}`, new Blob([body], { type: 'application/json' }));
         } else {
-            fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT }, body, keepalive: true });
+            fetch(`${KAIRO_ROUTES}/api/save`, { method: 'POST', headers: writeHeaders, body, keepalive: true });
         }
     }
     pendingSaves.clear();
@@ -231,13 +231,12 @@ function initUploadHandlers() {
 async function uploadAndInsertImage(file) {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('notePath', encPath(currentPath));
     try {
-        // no Content-Type header: the browser must set the multipart boundary itself
-        const res = await fetch('/api/upload', { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT }, body: formData });
+        // notePath rides in the query string because FormData normalizes newlines in a field value; no Content-Type header, so the browser sets the multipart boundary
+        const res = await fetch(`${KAIRO_ROUTES}/api/upload?notePath=${encodeURIComponent(currentPath)}`, { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE }, body: formData });
         if (!res.ok) throw new Error('upload failed: ' + res.status);
         const imgPath = await res.text();
-        view.dispatch(view.state.replaceSelection(`![Attachment](${encodeURI(imgPath)})`));
+        view.dispatch(view.state.replaceSelection(`![Attachment](${encodeMdDest(imgPath)})`));
         view.focus();
         await refreshTree();
     } catch (e) {

@@ -78,15 +78,23 @@ const KAIRO_CLIENT = (() => {
     return `${h[0]}${h[1]}${h[2]}${h[3]}-${h[4]}${h[5]}-${h[6]}${h[7]}-${h[8]}${h[9]}-${h.slice(10).join('')}`;
 })();
 
-function encPath(path) {
-    if (!path) return '';
-    const bytes = new TextEncoder().encode(path);
-    let bin = '';
-    for (const b of bytes) bin += String.fromCharCode(b);
-    // Use URL-safe Base64 without padding to match Go's decoder
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+// Lets the server reject a tab still running the pre-plain-path client instead of writing its base64 path verbatim
+const KAIRO_WIRE = '2';
+const writeHeaders = { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE };
+
+// The same literal as routePrefix in server.go and the asset tags in index.html; nothing but TestClientUsesRoutePrefix holds the three together
+const KAIRO_ROUTES = '/_kairo-21b89d9a-af98-4aae-b036-4c9a08a216aa';
+
+function encodeSegments(path) {
+    return path.split('/').map(encodeURIComponent).join('/');
 }
 
+// Parentheses are legal in a filename but are destination syntax inside a markdown link, so they are escaped here and nowhere else — an address bar keeps them readable
+function encodeMdDest(path) {
+    return encodeSegments(path).replace(/\(/g, '%28').replace(/\)/g, '%29');
+}
+
+// The wire carries plain paths now; this only reads a legacy /?path=<base64> browser URL
 function decPath(encoded) {
     if (!encoded) return '';
     try {
@@ -98,6 +106,24 @@ function decPath(encoded) {
         // A mangled shared URL must not abort initialization
         return '';
     }
+}
+
+function decodeSegment(seg) {
+    // A '%' that isn't an escape is a legal filename character, so it is escaped rather than allowed to abort the decode
+    try { return decodeURIComponent(seg.replace(/%(?![0-9A-Fa-f]{2})/g, '%25')); } catch (e) { return seg; }
+}
+
+function pathUrl(path, hash = '') {
+    const url = path ? '/' + encodeSegments(path) : '/';
+    return hash ? url + '#' + encodeURIComponent(hash) : url;
+}
+
+function urlPath(pathname) {
+    return pathname.split('/').filter(Boolean).map(decodeSegment).join('/');
+}
+
+function urlHash() {
+    return decodeSegment(window.location.hash.slice(1));
 }
 
 let toastTimer;
@@ -117,6 +143,11 @@ function showToast(message, type = 'info') {
     toast.classList.remove('hidden');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.add('hidden'), 3000);
+}
+
+// writeServiceError sends a specific reason (destination exists) that a bare status code cannot carry
+async function toastServerError(res, fallback) {
+    showToast((await res.text()).trim() || fallback, 'error');
 }
 
 function saveExpandedFolders() {
@@ -188,18 +219,8 @@ function updateBreadcrumbs(path) {
     });
 }
 
-function goHome() {
-    currentPath = null;
-    editorPath = null;
-    updateBreadcrumbs(null);
-    window.history.replaceState(null, '', '/');
-    els.moveBtn.classList.add('hidden');
-    els.deleteBtn.classList.add('hidden');
-    if (els.printBtn) els.printBtn.classList.add('hidden');
-    els.previewBtn.classList.add('hidden');
-    els.editorContainer.classList.add('hidden');
-    els.previewContainer.classList.add('hidden');
-    hideToc();
+async function goHome(nav = 'push') {
+    await loadFile('', false, { nav });
     refreshTree();
 }
 
@@ -285,20 +306,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         await moveItem(draggedPath, draggedPath.split('/').pop());
     };
 
-    const encInitPath = new URLSearchParams(window.location.search).get('path');
-    if (encInitPath) {
-        const initPath = decPath(encInitPath);
-        if (initPath) {
-            // loadFile rewrites the URL without the fragment, so capture the anchor first
-            const initHash = window.location.hash.slice(1);
-            const node = findNodeInTree(treeData, initPath);
-            await loadFile(initPath, node ? node.isDir : false);
-            scrollToAnchor(initHash);
-        }
+    // Only the pre-path-URL app root carried ?path=; anywhere else the query belongs to a URL that is not this app's
+    const legacy = window.location.pathname === '/' ? new URLSearchParams(window.location.search).get('path') : null;
+    const initPath = legacy ? decPath(legacy) : urlPath(window.location.pathname);
+    if (initPath) {
+        const initHash = urlHash();
+        const node = findNodeInTree(treeData, initPath);
+        await loadFile(initPath, node ? node.isDir : false, { nav: 'replace', hash: initHash });
+        scrollToAnchor(initHash);
     }
 });
 
-async function loadFile(path, isDir = false) {
+function showPreviewPane() {
+    els.editorContainer.classList.add('hidden');
+    els.previewContainer.classList.remove('hidden');
+    els.previewBtn.classList.add('hidden');
+    previewMode = true;
+    hideToc();
+}
+
+function renderNotice(message) {
+    els.markdownBody.innerHTML = '';
+    const p = document.createElement('p');
+    p.className = 'text-subtext0';
+    p.textContent = message;
+    els.markdownBody.appendChild(p);
+}
+
+async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
+    // Both null and '' mean "no note open", so re-entering the home state must not stack a second identical entry
+    const samePath = (currentPath || '') === (path || '');
+    // The history write stays above the await: a popstate landing mid-flush would otherwise be overwritten by this navigation
+    if (nav === 'push' && !samePath) window.history.pushState(null, '', pathUrl(path, hash));
+    else if (nav !== 'none') window.history.replaceState(null, '', pathUrl(path, hash));
+
     // Persist the previous file before the fetch below, so a switch can't load stale content over an in-flight save
     await flushPendingSave();
 
@@ -307,18 +348,13 @@ async function loadFile(path, isDir = false) {
     // Null while the editor still holds the previous note, so its doc can't autosave under the new path
     editorPath = null;
     updateBreadcrumbs(path);
-    window.history.replaceState(null, '', path ? `?path=${encPath(path)}` : '/');
 
     els.moveBtn.classList.toggle('hidden', !path);
     els.deleteBtn.classList.toggle('hidden', !path);
     if (els.printBtn) els.printBtn.classList.toggle('hidden', !path || isDir);
 
     if (isDir) {
-        els.editorContainer.classList.add('hidden');
-        els.previewContainer.classList.remove('hidden');
-        els.previewBtn.classList.add('hidden');
-        previewMode = true;
-        hideToc();
+        showPreviewPane();
         renderDirListing(path);
         els.previewContainer.scrollTop = 0;
         return;
@@ -328,15 +364,12 @@ async function loadFile(path, isDir = false) {
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.add('hidden');
         els.previewBtn.classList.add('hidden');
+        hideToc();
         return;
     }
 
     if (hasExt(path, IMAGE_EXTS)) {
-        els.editorContainer.classList.add('hidden');
-        els.previewContainer.classList.remove('hidden');
-        els.previewBtn.classList.add('hidden');
-        previewMode = true;
-        hideToc();
+        showPreviewPane();
         els.markdownBody.innerHTML = `<img src="${fileApiUrl(path)}" alt="${escapeHtml(path.split('/').pop())}" style="max-width:100%; border-radius:0.5rem;">`;
         els.previewContainer.scrollTop = 0;
         return;
@@ -371,7 +404,13 @@ async function loadFile(path, isDir = false) {
     } catch(e) {
         if (thisLoad !== loadVersion) return;
         console.error(e);
-        els.markdownBody.innerHTML = `<p style="color:#f38ba8">Error loading file</p>`;
+        // A bookmark or a back-navigation can address a note that no longer exists, so the failure needs its own state instead of leaving the previous note on screen
+        showPreviewPane();
+        els.moveBtn.classList.add('hidden');
+        els.deleteBtn.classList.add('hidden');
+        if (els.printBtn) els.printBtn.classList.add('hidden');
+        renderNotice(`Could not load ${path}`);
+        els.previewContainer.scrollTop = 0;
     }
 }
 
@@ -387,7 +426,7 @@ function renderDirListing(path) {
     ((node && node.children) || []).forEach(c => {
         const li = document.createElement('li');
         const a = document.createElement('a');
-        a.href = `?path=${encPath(c.path)}`;
+        a.href = pathUrl(c.path);
         a.dataset.kairoPath = c.path;
         a.textContent = c.name;
         li.appendChild(a);
@@ -497,13 +536,13 @@ async function moveItem(oldPath, newPath) {
     // Edits must land at the old path before it disappears
     await flushPendingSave();
     try {
-        const res = await fetch('/api/move', {
+        const res = await fetch(`${KAIRO_ROUTES}/api/move`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
-            body: JSON.stringify({ path: encPath(oldPath), newPath: encPath(newPath) })
+            headers: writeHeaders,
+            body: JSON.stringify({ path: oldPath, newPath })
         });
         if (!res.ok) {
-            showToast(res.status === 409 ? 'Destination already exists' : 'Failed to move', 'error');
+            await toastServerError(res, 'Failed to move');
             return false;
         }
         rebasePendingSaves(oldPath, newPath);
@@ -512,7 +551,7 @@ async function moveItem(oldPath, newPath) {
         if (currentPath === oldPath || (currentPath && currentPath.startsWith(oldPath + '/'))) {
             const rebased = newPath + currentPath.slice(oldPath.length);
             const moved = findNodeInTree(treeData, rebased);
-            loadFile(rebased, moved ? moved.isDir : false);
+            loadFile(rebased, moved ? moved.isDir : false, { nav: 'replace' });
         }
         return true;
     } catch (e) {
@@ -524,6 +563,20 @@ async function moveItem(oldPath, newPath) {
 
 function initEventListeners() {
     initLinkNavigation();
+
+    window.addEventListener('popstate', async () => {
+        const path = urlPath(window.location.pathname);
+        const hash = urlHash();
+        // A bfcache restore replays popstate for the entry already on screen; reloading it would discard the restored scroll position
+        if (path === currentPath) {
+            scrollToAnchor(hash);
+            return;
+        }
+        const node = findNodeInTree(treeData, path);
+        await loadFile(path, node ? node.isDir : false, { nav: 'none' });
+        scrollToAnchor(hash);
+    });
+
     els.previewBtn.addEventListener('click', () => togglePreview());
     els.themeToggle.addEventListener('click', toggleTheme);
     if (els.printBtn) {
@@ -547,8 +600,8 @@ function initEventListeners() {
         els.sidebarOverlay.classList.add('hidden');
     });
 
-    document.getElementById('kairo-home')?.addEventListener('click', goHome);
-    document.getElementById('kairo-home-mobile')?.addEventListener('click', goHome);
+    document.getElementById('kairo-home')?.addEventListener('click', () => goHome());
+    document.getElementById('kairo-home-mobile')?.addEventListener('click', () => goHome());
 
     if (window.innerWidth < NARROW_WIDTH && !sidebarCollapsed && tocVisible) {
         tocVisible = false;
@@ -602,22 +655,22 @@ function initEventListeners() {
 
         try {
             if (createMode === 'folder') {
-                const res = await fetch('/api/create-dir', {
+                const res = await fetch(`${KAIRO_ROUTES}/api/create-dir`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
-                    body: JSON.stringify({ path: encPath(path) })
+                    headers: writeHeaders,
+                    body: JSON.stringify({ path })
                 });
-                if (!res.ok) throw new Error('create failed: ' + res.status);
+                if (!res.ok) return await toastServerError(res, 'Failed to create');
                 els.createModal.backdrop.classList.add('hidden');
                 await refreshTree();
             } else {
                 if(!path.endsWith('.md')) path += '.md';
-                const res = await fetch('/api/create-file', {
+                const res = await fetch(`${KAIRO_ROUTES}/api/create-file`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
-                    body: JSON.stringify({ path: encPath(path), content: '# ' + val.replace(/\.md$/, '') })
+                    headers: writeHeaders,
+                    body: JSON.stringify({ path, content: '# ' + val.replace(/\.md$/, '') })
                 });
-                if (!res.ok) throw new Error('create failed: ' + res.status);
+                if (!res.ok) return await toastServerError(res, 'Failed to create');
                 // Server may suffix the name on collision, so open whatever path it actually created
                 const finalPath = await res.text();
                 els.createModal.backdrop.classList.add('hidden');
@@ -688,15 +741,15 @@ function initEventListeners() {
         // Drop any queued autosave so it cannot recreate the file after deletion
         discardPendingSave(currentPath);
         try {
-            const res = await fetch('/api/delete', {
+            const res = await fetch(`${KAIRO_ROUTES}/api/delete`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT },
-                body: JSON.stringify({ path: encPath(currentPath) })
+                headers: writeHeaders,
+                body: JSON.stringify({ path: currentPath })
             });
             if (!res.ok) throw new Error('delete failed: ' + res.status);
             els.deleteModal.backdrop.classList.add('hidden');
             await refreshTree();
-            loadFile('');
+            loadFile('', false, { nav: 'replace' });
         } catch (e) {
             console.error('Delete failed:', e);
             showToast('Failed to delete', 'error');
@@ -716,7 +769,7 @@ function initEventListeners() {
 
 async function refreshTree() {
     try {
-        const res = await fetch('/api/tree');
+        const res = await fetch(`${KAIRO_ROUTES}/api/tree`);
         if (!res.ok) throw new Error('tree fetch failed: ' + res.status);
         treeData = await res.json();
         els.fileTree.innerHTML = '';
@@ -881,7 +934,7 @@ function renderSearchResults(results) {
 
 async function runSearch(q) {
     try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const res = await fetch(`${KAIRO_ROUTES}/api/search?q=${encodeURIComponent(q)}`);
         if (!res.ok) throw new Error('search failed: ' + res.status);
         renderSearchResults((await res.json()) || []);
     } catch (e) {

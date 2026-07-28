@@ -3,7 +3,7 @@
 let kairoEvents = null;
 
 function kairoConnect() {
-    kairoEvents = new EventSource('/api/events?client=' + encodeURIComponent(KAIRO_CLIENT));
+    kairoEvents = new EventSource(`${KAIRO_ROUTES}/api/events?client=${encodeURIComponent(KAIRO_CLIENT)}`);
     kairoEvents.onmessage = onSyncEvent;
     kairoEvents.onopen = () => setSyncConnected(true);
     kairoEvents.onerror = () => setSyncConnected(false);
@@ -32,7 +32,7 @@ function onSyncEvent(e) {
             rebasePendingSaves(ev.path, ev.newPath);
             // treeData still holds the pre-move node (refresh is debounced), so the open path's own type carries the move
             const node = findNodeInTree(treeData, currentPath);
-            loadFile(rebased, node ? node.isDir : false);
+            loadFile(rebased, node ? node.isDir : false, { nav: 'replace' });
         }
         return;
     }
@@ -41,7 +41,7 @@ function onSyncEvent(e) {
         discardPendingSave(ev.path);
         if (currentPath && (currentPath === ev.path || currentPath.startsWith(ev.path + '/'))) {
             showToast('This note was deleted on another device', 'warning');
-            goHome();
+            goHome('replace');
         }
         return;
     }
@@ -57,7 +57,7 @@ async function applyRemote(path) {
         return;
     }
     try {
-        const res = await fetch(`/api/file?path=${encPath(path)}`);
+        const res = await fetch(fileApiUrl(path));
         if (!res.ok || path !== currentPath) return;
         const token = res.headers.get('X-Kairo-Version');
         const content = await res.text();

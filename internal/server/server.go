@@ -43,6 +43,9 @@ func New(cfg Config) *Server {
 	}
 }
 
+// Every server route hides behind one unguessable segment so that no note path can ever shadow one; a compile-time constant rather than a per-process value so bookmarks, caches and rolling restarts survive
+const routePrefix = "/_kairo-21b89d9a-af98-4aae-b036-4c9a08a216aa"
+
 func (s *Server) Setup() error {
 	storage, err := notes.NewStorage(s.config.DataDir)
 	if err != nil {
@@ -55,27 +58,47 @@ func (s *Server) Setup() error {
 	if err != nil {
 		return fmt.Errorf("failed to create static filesystem: %w", err)
 	}
-	s.mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+	s.mux.Handle(routePrefix+"/static/", http.StripPrefix(routePrefix+"/static/", http.FileServer(http.FS(staticFS))))
 
-	// API routes live on a sub-mux so the SPA catch-all can't shadow
-	// method enforcement (405) or unknown-endpoint 404s under /api/
+	// API routes live on a sub-mux so the SPA catch-all can't shadow method enforcement (405) or unknown-endpoint 404s under the API subtree
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("GET /api/tree", s.handleTree)
 	apiMux.HandleFunc("GET /api/file", s.handleFile)
 	apiMux.HandleFunc("GET /api/search", s.handleSearch)
-	apiMux.HandleFunc("POST /api/save", s.handleSave)
-	apiMux.HandleFunc("POST /api/create-file", s.handleCreateFile)
-	apiMux.HandleFunc("POST /api/create-dir", s.handleCreateDir)
-	apiMux.HandleFunc("POST /api/delete", s.handleDelete)
-	apiMux.HandleFunc("POST /api/move", s.handleMove)
-	apiMux.HandleFunc("POST /api/upload", s.handleUpload)
+	apiMux.HandleFunc("POST /api/save", requireWire(s.handleSave))
+	apiMux.HandleFunc("POST /api/create-file", requireWire(s.handleCreateFile))
+	apiMux.HandleFunc("POST /api/create-dir", requireWire(s.handleCreateDir))
+	apiMux.HandleFunc("POST /api/delete", requireWire(s.handleDelete))
+	apiMux.HandleFunc("POST /api/move", requireWire(s.handleMove))
+	apiMux.HandleFunc("POST /api/upload", requireWire(s.handleUpload))
 	apiMux.HandleFunc("GET /api/events", s.handleEvents)
 	apiMux.HandleFunc("GET /api/health", s.handleHealth)
-	s.mux.Handle("/api/", apiMux)
+	s.mux.Handle(routePrefix+"/api/", http.StripPrefix(routePrefix, apiMux))
+
+	// A tab left open across the upgrade still posts to the old unprefixed endpoints; without these it would read the SPA shell as a 200 and drop the edit it was holding
+	for _, pattern := range []string{"POST /api/save", "POST /api/create-file", "POST /api/create-dir", "POST /api/delete", "POST /api/move", "POST /api/upload"} {
+		s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "Outdated client, please reload the page", http.StatusBadRequest)
+		})
+	}
 
 	s.mux.HandleFunc("/", s.handleIndex)
 
 	return nil
+}
+
+const wireVersion = "2"
+
+// A tab still running the pre-plain-path client sends base64, which is itself a legal filename and would be written verbatim to a junk path; refusing the write turns silent corruption into the save failure the client already knows how to surface
+func requireWire(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// sendBeacon can't set headers, so the marker rides as a query param there
+		if r.Header.Get("X-Kairo-Wire") != wireVersion && r.URL.Query().Get("wire") != wireVersion {
+			http.Error(w, "Outdated client, please reload the page", http.StatusBadRequest)
+			return
+		}
+		next(w, r)
+	}
 }
 
 func (s *Server) Run() error {

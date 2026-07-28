@@ -344,11 +344,15 @@ func TestServiceMoveRewritesAttachments(t *testing.T) {
 		"![web](http://example.com/x.png)",
 		"![inline](data:image/png;base64,AAAA)",
 		"![ghost](/data/a/attachments/ghost.png)",
+		"![esc](/data/a/attachments/four%20%234.png)",
+		"![par](/data/a/attachments/five%20(5).png)",
 	}, "\n")
 	writeFile(t, s, "a/note.md", content)
 	writeFile(t, s, "a/attachments/one.png", "1")
 	writeFile(t, s, "a/attachments/two.png", "2")
 	writeFile(t, s, "a/attachments/three.png", "3")
+	writeFile(t, s, "a/attachments/four #4.png", "4")
+	writeFile(t, s, "a/attachments/five (5).png", "5")
 
 	if err := svc.Move("a/note.md", "b/note.md"); err != nil {
 		t.Fatalf("Move: %v", err)
@@ -365,13 +369,15 @@ func TestServiceMoveRewritesAttachments(t *testing.T) {
 		"![web](http://example.com/x.png)",
 		"![inline](data:image/png;base64,AAAA)",
 		"![ghost](/data/a/attachments/ghost.png)",
+		"![esc](attachments/four%20%234.png)",
+		"![par](attachments/five%20%285%29.png)",
 	}
 	if got := strings.Split(string(moved), "\n"); !slices.Equal(got, want) {
 		t.Fatalf("rewritten note:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 
 	mustExist(t, s, "a/note.md", false)
-	for _, p := range []string{"b/attachments/one.png", "b/attachments/two.png", "b/attachments/three.png"} {
+	for _, p := range []string{"b/attachments/one.png", "b/attachments/two.png", "b/attachments/three.png", "b/attachments/four #4.png", "b/attachments/five (5).png"} {
 		mustExist(t, s, p, true)
 	}
 	if _, err := os.Stat(filepath.Join(s.dataDir, "a", "attachments")); !errors.Is(err, os.ErrNotExist) {
@@ -582,4 +588,62 @@ func findChild(t *testing.T, n *FileNode, name string) *FileNode {
 	}
 	t.Fatalf("child %q not found under %q (have %v)", name, n.Name, childNames(n))
 	return nil
+}
+
+func TestMoveAttachmentsEscapedNames(t *testing.T) {
+	// the link is percent-encoded, the file on disk is not; a mismatch silently orphans the attachment
+	tests := []struct {
+		name     string
+		fileName string
+		link     string
+	}{
+		{"space", "a b.png", "attachments/a%20b.png"},
+		{"hash", "fig#3.png", "attachments/fig%233.png"},
+		{"question mark", "q?.png", "attachments/q%3F.png"},
+		{"unicode", "ünï.png", "attachments/%C3%BCn%C3%AF.png"},
+		{"plain name", "plain.png", "attachments/plain.png"},
+		{"literal percent in the name", "50%25 off.png", "attachments/50%2525%20off.png"},
+		{"raw parentheses", "pic (1).png", "attachments/pic%20(1).png"},
+		{"raw parentheses adjacent to the stem", "s(2).png", "attachments/s(2).png"},
+		{"unbalanced open parenthesis", "s(2.png", "attachments/s(2.png"},
+		{"escaped parentheses, as the client now emits them", "pic (1).png", "attachments/pic%20%281%29.png"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newTestStorage(t)
+			svc := NewService(s)
+			writeFile(t, s, "src/attachments/"+tt.fileName, "img")
+			writeFile(t, s, "src/note.md", "![a]("+tt.link+")")
+
+			if err := svc.Move("src/note.md", "dst/note.md"); err != nil {
+				t.Fatalf("Move: %v", err)
+			}
+			mustExist(t, s, "dst/attachments/"+tt.fileName, true)
+			mustExist(t, s, "src/attachments/"+tt.fileName, false)
+
+			got, err := s.ReadFile("dst/note.md")
+			if err != nil {
+				t.Fatalf("ReadFile: %v", err)
+			}
+			// the link is relative to the note's directory, so it must survive the move unchanged
+			if string(got) != "![a]("+tt.link+")" {
+				t.Fatalf("note body = %q, want the link left intact", got)
+			}
+		})
+	}
+}
+
+func TestMoveAttachmentsRefusesEscapedTraversal(t *testing.T) {
+	// %2F decodes to a real separator, which would let a link reach a file outside the attachments directory
+	s := newTestStorage(t)
+	svc := NewService(s)
+	writeFile(t, s, "src/secret.md", "private")
+	writeFile(t, s, "src/note.md", "![a](attachments/..%2Fsecret.md)")
+
+	if err := svc.Move("src/note.md", "dst/note.md"); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+	mustExist(t, s, "src/secret.md", true)
+	mustExist(t, s, "dst/secret.md", false)
+	mustExist(t, s, "dst/attachments/secret.md", false)
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"unicode/utf8"
 
 	"github.com/tanq16/kairo/internal/notes"
 )
@@ -36,21 +38,22 @@ func clientID(r *http.Request) string {
 	return r.URL.Query().Get("client")
 }
 
-func decodeBase64Path(encoded string) (string, error) {
+// Paths crossed the wire base64-encoded before they became plain; only GET /api/file still reads that form, for URLs already shared or stored in a note
+func legacyBase64Path(encoded string) (string, bool) {
 	if encoded == "" {
-		return "", nil
+		return "", false
 	}
-	decoded, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil {
-		decoded, err = base64.URLEncoding.DecodeString(encoded)
+	for _, enc := range []*base64.Encoding{base64.RawURLEncoding, base64.URLEncoding, base64.StdEncoding} {
+		decoded, err := enc.DecodeString(encoded)
 		if err != nil {
-			decoded, err = base64.StdEncoding.DecodeString(encoded)
-			if err != nil {
-				return "", err
-			}
+			continue
+		}
+		// An ordinary extension-less note name is itself decodable, so a decode only counts when it yields something that could have named a file
+		if utf8.Valid(decoded) && bytes.ContainsAny(decoded, "/.") {
+			return string(decoded), true
 		}
 	}
-	return string(decoded), nil
+	return "", false
 }
 
 func (s *Server) handleTree(w http.ResponseWriter, r *http.Request) {
@@ -65,20 +68,22 @@ func (s *Server) handleTree(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
-	pathParam := r.URL.Query().Get("path")
-	decodedPath, err := decodeBase64Path(pathParam)
-	if err != nil {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
+	notePath := r.URL.Query().Get("path")
 
-	content, err := s.service.GetFile(decodedPath)
+	content, err := s.service.GetFile(notePath)
+	if errors.Is(err, os.ErrNotExist) {
+		if legacy, ok := legacyBase64Path(notePath); ok {
+			if legacyContent, legacyErr := s.service.GetFile(legacy); legacyErr == nil {
+				notePath, content, err = legacy, legacyContent, nil
+			}
+		}
+	}
 	if err != nil {
 		writeServiceError(w, "read file", err)
 		return
 	}
 
-	ext := filepath.Ext(decodedPath)
+	ext := filepath.Ext(notePath)
 	mimeType := mime.TypeByExtension(ext)
 	if mimeType != "" {
 		w.Header().Set("Content-Type", mimeType)
@@ -95,19 +100,13 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decodedPath, err := decodeBase64Path(req.Path)
-	if err != nil {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
 	// serialize write+token+emit so a reordered concurrent same-path save can't record a token for bytes it didn't write last
 	s.saveMu.Lock()
-	err = s.service.SaveFile(decodedPath, req.Content)
+	err := s.service.SaveFile(req.Path, req.Content)
 	if err == nil {
 		token := contentToken([]byte(req.Content))
-		if s.tokens.changed(decodedPath, token) {
-			s.hub.emit(Event{Op: "save", Path: decodedPath, Token: token, Origin: clientID(r)})
+		if s.tokens.changed(req.Path, token) {
+			s.hub.emit(Event{Op: "save", Path: req.Path, Token: token, Origin: clientID(r)})
 		}
 	}
 	s.saveMu.Unlock()
@@ -126,13 +125,7 @@ func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decodedPath, err := decodeBase64Path(req.Path)
-	if err != nil {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	finalPath, err := s.service.CreateFile(decodedPath, req.Content)
+	finalPath, err := s.service.CreateFile(req.Path, req.Content)
 	if err != nil {
 		writeServiceError(w, "create file", err)
 		return
@@ -151,18 +144,12 @@ func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decodedPath, err := decodeBase64Path(req.Path)
-	if err != nil {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	if err := s.service.CreateDir(decodedPath); err != nil {
+	if err := s.service.CreateDir(req.Path); err != nil {
 		writeServiceError(w, "create directory", err)
 		return
 	}
 
-	s.hub.emit(Event{Op: "createDir", Path: decodedPath, Origin: clientID(r)})
+	s.hub.emit(Event{Op: "createDir", Path: req.Path, Origin: clientID(r)})
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -173,19 +160,13 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decodedPath, err := decodeBase64Path(req.Path)
-	if err != nil {
-		http.Error(w, "Invalid path", http.StatusBadRequest)
-		return
-	}
-
-	if err := s.service.Delete(decodedPath); err != nil {
+	if err := s.service.Delete(req.Path); err != nil {
 		writeServiceError(w, "delete", err)
 		return
 	}
 
-	s.tokens.dropTree(decodedPath)
-	s.hub.emit(Event{Op: "delete", Path: decodedPath, Origin: clientID(r)})
+	s.tokens.dropTree(req.Path)
+	s.hub.emit(Event{Op: "delete", Path: req.Path, Origin: clientID(r)})
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -196,26 +177,14 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decodedOldPath, err := decodeBase64Path(req.Path)
-	if err != nil {
-		http.Error(w, "Invalid old path", http.StatusBadRequest)
-		return
-	}
-
-	decodedNewPath, err := decodeBase64Path(req.NewPath)
-	if err != nil {
-		http.Error(w, "Invalid new path", http.StatusBadRequest)
-		return
-	}
-
-	if err := s.service.Move(decodedOldPath, decodedNewPath); err != nil {
+	if err := s.service.Move(req.Path, req.NewPath); err != nil {
 		writeServiceError(w, "move", err)
 		return
 	}
 
 	// Move rewrites in-note attachment links, so the old token (and any descendant tokens for a moved directory) is stale — drop the tree rather than migrate it to the new path
-	s.tokens.dropTree(decodedOldPath)
-	s.hub.emit(Event{Op: "move", Path: decodedOldPath, NewPath: decodedNewPath, Origin: clientID(r)})
+	s.tokens.dropTree(req.Path)
+	s.hub.emit(Event{Op: "move", Path: req.Path, NewPath: req.NewPath, Origin: clientID(r)})
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -239,19 +208,13 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	notePath := r.FormValue("notePath")
-	decodedNotePath, err := decodeBase64Path(notePath)
-	if err != nil {
-		http.Error(w, "Invalid note path", http.StatusBadRequest)
-		return
-	}
-
-	relPath, err := s.service.UploadFile(decodedNotePath, file, header.Filename)
+	relPath, err := s.service.UploadFile(notePath, file, header.Filename)
 	if err != nil {
 		writeServiceError(w, "upload file", err)
 		return
 	}
 
-	s.hub.emit(Event{Op: "upload", Path: decodedNotePath, Origin: clientID(r)})
+	s.hub.emit(Event{Op: "upload", Path: notePath, Origin: clientID(r)})
 	w.Write([]byte(relPath))
 }
 
