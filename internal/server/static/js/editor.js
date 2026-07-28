@@ -236,7 +236,7 @@ async function uploadAndInsertImage(file) {
         const res = await fetch(`${KAIRO_ROUTES}/api/upload?notePath=${encodeURIComponent(currentPath)}`, { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE }, body: formData });
         if (!res.ok) throw new Error('upload failed: ' + res.status);
         const imgPath = await res.text();
-        view.dispatch(view.state.replaceSelection(`![Attachment](${encodeSegments(imgPath)})`));
+        view.dispatch(view.state.replaceSelection(`![Attachment](${encodeMdDest(imgPath)})`));
         view.focus();
         await refreshTree();
     } catch (e) {

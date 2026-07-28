@@ -345,12 +345,14 @@ func TestServiceMoveRewritesAttachments(t *testing.T) {
 		"![inline](data:image/png;base64,AAAA)",
 		"![ghost](/data/a/attachments/ghost.png)",
 		"![esc](/data/a/attachments/four%20%234.png)",
+		"![par](/data/a/attachments/five%20(5).png)",
 	}, "\n")
 	writeFile(t, s, "a/note.md", content)
 	writeFile(t, s, "a/attachments/one.png", "1")
 	writeFile(t, s, "a/attachments/two.png", "2")
 	writeFile(t, s, "a/attachments/three.png", "3")
 	writeFile(t, s, "a/attachments/four #4.png", "4")
+	writeFile(t, s, "a/attachments/five (5).png", "5")
 
 	if err := svc.Move("a/note.md", "b/note.md"); err != nil {
 		t.Fatalf("Move: %v", err)
@@ -368,13 +370,14 @@ func TestServiceMoveRewritesAttachments(t *testing.T) {
 		"![inline](data:image/png;base64,AAAA)",
 		"![ghost](/data/a/attachments/ghost.png)",
 		"![esc](attachments/four%20%234.png)",
+		"![par](attachments/five%20%285%29.png)",
 	}
 	if got := strings.Split(string(moved), "\n"); !slices.Equal(got, want) {
 		t.Fatalf("rewritten note:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 
 	mustExist(t, s, "a/note.md", false)
-	for _, p := range []string{"b/attachments/one.png", "b/attachments/two.png", "b/attachments/three.png", "b/attachments/four #4.png"} {
+	for _, p := range []string{"b/attachments/one.png", "b/attachments/two.png", "b/attachments/three.png", "b/attachments/four #4.png", "b/attachments/five (5).png"} {
 		mustExist(t, s, p, true)
 	}
 	if _, err := os.Stat(filepath.Join(s.dataDir, "a", "attachments")); !errors.Is(err, os.ErrNotExist) {
@@ -600,6 +603,10 @@ func TestMoveAttachmentsEscapedNames(t *testing.T) {
 		{"unicode", "ünï.png", "attachments/%C3%BCn%C3%AF.png"},
 		{"plain name", "plain.png", "attachments/plain.png"},
 		{"literal percent in the name", "50%25 off.png", "attachments/50%2525%20off.png"},
+		{"raw parentheses", "pic (1).png", "attachments/pic%20(1).png"},
+		{"raw parentheses adjacent to the stem", "s(2).png", "attachments/s(2).png"},
+		{"unbalanced open parenthesis", "s(2.png", "attachments/s(2.png"},
+		{"escaped parentheses, as the client now emits them", "pic (1).png", "attachments/pic%20%281%29.png"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

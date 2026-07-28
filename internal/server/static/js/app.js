@@ -89,6 +89,11 @@ function encodeSegments(path) {
     return path.split('/').map(encodeURIComponent).join('/');
 }
 
+// Parentheses are legal in a filename but are destination syntax inside a markdown link, so they are escaped here and nowhere else — an address bar keeps them readable
+function encodeMdDest(path) {
+    return encodeSegments(path).replace(/\(/g, '%28').replace(/\)/g, '%29');
+}
+
 // The wire carries plain paths now; this only reads a legacy /?path=<base64> browser URL
 function decPath(encoded) {
     if (!encoded) return '';

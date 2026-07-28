@@ -87,7 +87,8 @@ func (s *Service) Move(oldPath, newPath string) error {
 	return nil
 }
 
-var mdImageRe = regexp.MustCompile(`(!\[[^\]]*\]\()([^)]+)(\))`)
+// Parens are legal in a filename and marked renders them, so a balanced pair belongs in the destination; the closing one is optional because marked renders an unbalanced open paren too
+var mdImageRe = regexp.MustCompile(`(!\[[^\]]*\]\()((?:[^()\s]|\([^()]*\)?)+)(\))`)
 var htmlImageRe = regexp.MustCompile(`(<img[^>]+src=["'])([^"']+)(["'][^>]*>)`)
 
 // A segment that fails to decode is kept verbatim, matching how the browser treats a stray '%' in a filename
