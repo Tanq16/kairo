@@ -60,8 +60,7 @@ func (s *Server) Setup() error {
 	}
 	s.mux.Handle(routePrefix+"/static/", http.StripPrefix(routePrefix+"/static/", http.FileServer(http.FS(staticFS))))
 
-	// API routes live on a sub-mux so the SPA catch-all can't shadow
-	// method enforcement (405) or unknown-endpoint 404s under the API subtree
+	// API routes live on a sub-mux so the SPA catch-all can't shadow method enforcement (405) or unknown-endpoint 404s under the API subtree
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("GET /api/tree", s.handleTree)
 	apiMux.HandleFunc("GET /api/file", s.handleFile)
