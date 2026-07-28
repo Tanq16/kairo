@@ -1,4 +1,4 @@
-.PHONY: help assets verify-assets codemirror clean build build-for build-all test docker-build docker-push version
+.PHONY: help assets verify-assets codemirror icons clean build build-for build-all test docker-build docker-push version
 
 # =============================================================================
 # Variables
@@ -18,12 +18,21 @@ CSS_DIR := $(STATIC_DIR)/css
 FONTS_DIR := $(STATIC_DIR)/fonts
 
 # Asset versions
-LUCIDE_VERSION := 1.24.0
-MARKEDJS_VERSION := 18.0.6
+TAILWIND_VERSION := 3.4.17
+LUCIDE_VERSION := 1.27.0
+MARKEDJS_VERSION := 18.0.7
 HIGHLIGHTJS_VERSION := 11.11.1
 MERMAIDJS_VERSION := 11.16.0
-DOMPURIFY_VERSION := 3.4.11
+DOMPURIFY_VERSION := 3.4.12
 CODEMIRROR_BUNDLE := $(JS_DIR)/codemirror-bundle.min.js
+CODEMIRROR_PKGS := @codemirror/view@6.43.7 @codemirror/state@6.7.1 @codemirror/lang-markdown@6.5.1 \
+	@codemirror/commands@6.10.4 @codemirror/autocomplete@6.20.3 @codemirror/language@6.12.4 \
+	@lezer/highlight@1.2.3
+
+LOGO_SVG := .github/assets/logo.svg
+
+# Google Fonts answers a User-Agent it cannot place with TTF; only a full modern browser string gets the woff2 the CSS is written against
+BROWSER_UA := Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
 
 # Console colors
 CYAN := \033[0;36m
@@ -46,7 +55,7 @@ help: ## Show this help
 assets: ## Download static assets
 	@echo "$(CYAN)Downloading assets...$(NC)"
 	@mkdir -p $(JS_DIR) $(CSS_DIR) $(FONTS_DIR) $(STATIC_DIR)/icons
-	@curl -sL "https://cdn.tailwindcss.com" -o "$(JS_DIR)/tailwindcss.js"
+	@curl -sL "https://cdn.tailwindcss.com/$(TAILWIND_VERSION)" -o "$(JS_DIR)/tailwindcss.js"
 	@curl -sL "https://unpkg.com/lucide@$(LUCIDE_VERSION)/dist/umd/lucide.min.js" -o "$(JS_DIR)/lucide.min.js"
 	@curl -sL "https://cdn.jsdelivr.net/npm/marked@$(MARKEDJS_VERSION)/lib/marked.umd.js" -o "$(JS_DIR)/marked.min.js"
 	@curl -sL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/$(HIGHLIGHTJS_VERSION)/highlight.min.js" -o "$(JS_DIR)/highlight.min.js"
@@ -54,21 +63,21 @@ assets: ## Download static assets
 	@curl -sL "https://cdn.jsdelivr.net/npm/dompurify@$(DOMPURIFY_VERSION)/dist/purify.min.js" -o "$(JS_DIR)/dompurify.min.js"
 	@curl -sL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/$(HIGHLIGHTJS_VERSION)/styles/github-dark.min.css" -o "$(CSS_DIR)/github-dark.min.css"
 	@curl -sL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/$(HIGHLIGHTJS_VERSION)/styles/github.min.css" -o "$(CSS_DIR)/github.min.css"
-	@curl -sL "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" -H "User-Agent: Mozilla/5.0" -o "$(CSS_DIR)/inter.css"
+	@curl -sL "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" -H "User-Agent: $(BROWSER_UA)" -o "$(CSS_DIR)/inter.css"
 	@grep -o "https://fonts.gstatic.com/[^)']*" "$(CSS_DIR)/inter.css" | sort -u | while read url; do \
 		filename=$$(basename "$$url" | sed 's/?.*//'); \
 		curl -sL "$$url" -o "$(FONTS_DIR)/$$filename"; \
 	done
 	@sed -i.bak -E 's|https://fonts.gstatic.com/s/inter/[^/]+/||g' "$(CSS_DIR)/inter.css" && rm -f "$(CSS_DIR)/inter.css.bak"
 	@sed -i.bak 's|src: url(|src: url(../fonts/|g' "$(CSS_DIR)/inter.css" && rm -f "$(CSS_DIR)/inter.css.bak"
-	@curl -sL "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" -H "User-Agent: Mozilla/5.0" -o "$(CSS_DIR)/jetbrains-mono.css"
+	@curl -sL "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" -H "User-Agent: $(BROWSER_UA)" -o "$(CSS_DIR)/jetbrains-mono.css"
 	@grep -o "https://fonts.gstatic.com/[^)']*" "$(CSS_DIR)/jetbrains-mono.css" | sort -u | while read url; do \
 		filename=$$(basename "$$url" | sed 's/?.*//'); \
 		curl -sL "$$url" -o "$(FONTS_DIR)/$$filename"; \
 	done
 	@sed -i.bak -E 's|https://fonts.gstatic.com/s/jetbrainsmono/[^/]+/||g' "$(CSS_DIR)/jetbrains-mono.css" && rm -f "$(CSS_DIR)/jetbrains-mono.css.bak"
 	@sed -i.bak 's|src: url(|src: url(../fonts/|g' "$(CSS_DIR)/jetbrains-mono.css" && rm -f "$(CSS_DIR)/jetbrains-mono.css.bak"
-	@cp .github/assets/logo.svg $(STATIC_DIR)/icons/favicon.svg
+	@cp $(LOGO_SVG) $(STATIC_DIR)/icons/favicon.svg
 	@echo "$(GREEN)Assets downloaded$(NC)"
 
 verify-assets: ## Verify required assets exist
@@ -76,19 +85,28 @@ verify-assets: ## Verify required assets exist
 	@test -f $(CODEMIRROR_BUNDLE) || (echo "$(YELLOW)codemirror-bundle.min.js missing. Run 'make codemirror'$(NC)" && exit 1)
 	@grep -q 'url(../fonts/' "$(CSS_DIR)/inter.css" || (echo "$(YELLOW)inter.css has stale font paths. Run 'make clean && make assets'$(NC)" && exit 1)
 	@grep -q 'url(../fonts/' "$(CSS_DIR)/jetbrains-mono.css" || (echo "$(YELLOW)jetbrains-mono.css has stale font paths. Run 'make clean && make assets'$(NC)" && exit 1)
+	@grep -q "format('woff2')" "$(CSS_DIR)/inter.css" || (echo "$(YELLOW)inter.css fell back to TTF. Run 'make clean && make assets'$(NC)" && exit 1)
+	@grep -q "format('woff2')" "$(CSS_DIR)/jetbrains-mono.css" || (echo "$(YELLOW)jetbrains-mono.css fell back to TTF. Run 'make clean && make assets'$(NC)" && exit 1)
+	@test -f $(STATIC_DIR)/icons/favicon.ico -a -f $(STATIC_DIR)/icons/favicon.png -a -f $(STATIC_DIR)/icons/apple-touch-icon.png || (echo "$(YELLOW)App icons missing. Run 'make icons'$(NC)" && exit 1)
 	@echo "$(GREEN)Assets verified$(NC)"
 
 codemirror: ## Rebuild CodeMirror 6 bundle (requires Node.js)
 	@echo "$(CYAN)Building CodeMirror bundle...$(NC)"
-	@test -d node_modules/@codemirror || npm install --silent --no-audit --no-fund \
-		@codemirror/view @codemirror/state @codemirror/lang-markdown \
-		@codemirror/commands @codemirror/autocomplete @codemirror/language @lezer/highlight
+	@npm install --silent --no-audit --no-fund $(CODEMIRROR_PKGS)
 	@npx esbuild cm-entry.js --bundle --format=iife --global-name=CM --minify --outfile=$(CURDIR)/$(CODEMIRROR_BUNDLE)
 	@echo "$(GREEN)CodeMirror bundle built$(NC)"
 
+icons: ## Regenerate app icons from the logo (requires ImageMagick)
+	@echo "$(CYAN)Generating icons...$(NC)"
+	@mkdir -p $(STATIC_DIR)/icons
+	@magick -background none -density 1200 $(LOGO_SVG) -resize 32x32 -depth 8 -strip $(STATIC_DIR)/icons/favicon.png
+	@magick -background none -density 1200 $(LOGO_SVG) -resize 32x32 -depth 8 -strip $(STATIC_DIR)/icons/favicon.ico
+	@magick -background none -density 1200 $(LOGO_SVG) -resize 180x180 -depth 8 -strip $(STATIC_DIR)/icons/apple-touch-icon.png
+	@echo "$(GREEN)Icons generated$(NC)"
+
 clean: ## Remove built artifacts and downloaded assets
 	@rm -f $(APP_NAME) $(APP_NAME)-*
-	@rm -rf $(JS_DIR)/*.min.js $(JS_DIR)/tailwindcss.js $(CSS_DIR)/*.css $(FONTS_DIR)/*.ttf $(STATIC_DIR)/icons/favicon.svg
+	@rm -rf $(JS_DIR)/*.min.js $(JS_DIR)/tailwindcss.js $(CSS_DIR)/*.css $(FONTS_DIR)/* $(STATIC_DIR)/icons/favicon.svg
 	@rm -rf node_modules package.json package-lock.json
 	@echo "$(GREEN)Cleaned$(NC)"
 
