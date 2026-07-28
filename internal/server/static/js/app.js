@@ -82,6 +82,9 @@ const KAIRO_CLIENT = (() => {
 const KAIRO_WIRE = '2';
 const writeHeaders = { 'Content-Type': 'application/json', 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE };
 
+// The same literal as routePrefix in server.go and the asset tags in index.html; nothing but TestClientUsesRoutePrefix holds the three together
+const KAIRO_ROUTES = '/_kairo-21b89d9a-af98-4aae-b036-4c9a08a216aa';
+
 function encodeSegments(path) {
     return path.split('/').map(encodeURIComponent).join('/');
 }
@@ -137,7 +140,7 @@ function showToast(message, type = 'info') {
     toastTimer = setTimeout(() => toast.classList.add('hidden'), 3000);
 }
 
-// writeServiceError sends a specific reason (reserved name, destination exists) that a bare status code cannot carry
+// writeServiceError sends a specific reason (destination exists) that a bare status code cannot carry
 async function toastServerError(res, fallback) {
     showToast((await res.text()).trim() || fallback, 'error');
 }
@@ -298,7 +301,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         await moveItem(draggedPath, draggedPath.split('/').pop());
     };
 
-    const legacy = new URLSearchParams(window.location.search).get('path');
+    // Only the pre-path-URL app root carried ?path=; anywhere else the query belongs to a URL that is not this app's
+    const legacy = window.location.pathname === '/' ? new URLSearchParams(window.location.search).get('path') : null;
     const initPath = legacy ? decPath(legacy) : urlPath(window.location.pathname);
     if (initPath) {
         const initHash = urlHash();
@@ -527,7 +531,7 @@ async function moveItem(oldPath, newPath) {
     // Edits must land at the old path before it disappears
     await flushPendingSave();
     try {
-        const res = await fetch('/api/move', {
+        const res = await fetch(`${KAIRO_ROUTES}/api/move`, {
             method: 'POST',
             headers: writeHeaders,
             body: JSON.stringify({ path: oldPath, newPath })
@@ -646,7 +650,7 @@ function initEventListeners() {
 
         try {
             if (createMode === 'folder') {
-                const res = await fetch('/api/create-dir', {
+                const res = await fetch(`${KAIRO_ROUTES}/api/create-dir`, {
                     method: 'POST',
                     headers: writeHeaders,
                     body: JSON.stringify({ path })
@@ -656,7 +660,7 @@ function initEventListeners() {
                 await refreshTree();
             } else {
                 if(!path.endsWith('.md')) path += '.md';
-                const res = await fetch('/api/create-file', {
+                const res = await fetch(`${KAIRO_ROUTES}/api/create-file`, {
                     method: 'POST',
                     headers: writeHeaders,
                     body: JSON.stringify({ path, content: '# ' + val.replace(/\.md$/, '') })
@@ -732,7 +736,7 @@ function initEventListeners() {
         // Drop any queued autosave so it cannot recreate the file after deletion
         discardPendingSave(currentPath);
         try {
-            const res = await fetch('/api/delete', {
+            const res = await fetch(`${KAIRO_ROUTES}/api/delete`, {
                 method: 'POST',
                 headers: writeHeaders,
                 body: JSON.stringify({ path: currentPath })
@@ -760,7 +764,7 @@ function initEventListeners() {
 
 async function refreshTree() {
     try {
-        const res = await fetch('/api/tree');
+        const res = await fetch(`${KAIRO_ROUTES}/api/tree`);
         if (!res.ok) throw new Error('tree fetch failed: ' + res.status);
         treeData = await res.json();
         els.fileTree.innerHTML = '';
@@ -925,7 +929,7 @@ function renderSearchResults(results) {
 
 async function runSearch(q) {
     try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const res = await fetch(`${KAIRO_ROUTES}/api/search?q=${encodeURIComponent(q)}`);
         if (!res.ok) throw new Error('search failed: ' + res.status);
         renderSearchResults((await res.json()) || []);
     } catch (e) {

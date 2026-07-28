@@ -18,8 +18,8 @@ function linkTarget(href) {
     let url;
     try { url = new URL(href, document.baseURI); } catch (e) { return null; }
     if (url.origin !== window.location.origin) return null;
-    // Rewritten image sources are same-origin, so a second pass would otherwise re-resolve them as note paths
-    if (url.pathname === '/api/file') return null;
+    // A same-origin URL carrying a query is a raw-file link, not a note path, and there is nowhere in the return value to carry the query onward
+    if (url.search) return null;
     return { path: urlPath(url.pathname), hash: decodeSegment(url.hash.slice(1)) };
 }
 
@@ -37,7 +37,7 @@ function resolveLink(path) {
 }
 
 function fileApiUrl(path) {
-    return `/api/file?path=${encodeURIComponent(path)}`;
+    return `${KAIRO_ROUTES}/api/file?path=${encodeURIComponent(path)}`;
 }
 
 // anything the editor and the image viewer don't cover is served raw, so a PDF opens in the browser instead of landing in CodeMirror as bytes

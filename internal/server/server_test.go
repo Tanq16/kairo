@@ -66,7 +66,7 @@ func saveNote(t *testing.T, s *Server, notePath, content string) *httptest.Respo
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/save", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, routePrefix+"/api/save", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Kairo-Wire", wireVersion)
 	rec := httptest.NewRecorder()
@@ -95,7 +95,7 @@ func TestAPIPathRoundTrip(t *testing.T) {
 				t.Fatalf("save %q status = %d, body %q", notePath, rec.Code, rec.Body)
 			}
 
-			req := httptest.NewRequest(http.MethodGet, "/api/file?path="+url.QueryEscape(notePath), nil)
+			req := httptest.NewRequest(http.MethodGet, routePrefix+"/api/file?path="+url.QueryEscape(notePath), nil)
 			rec := httptest.NewRecorder()
 			s.mux.ServeHTTP(rec, req)
 			if rec.Code != http.StatusOK {
@@ -116,7 +116,7 @@ func TestHandleFileLegacyBase64URL(t *testing.T) {
 	}
 
 	encoded := base64.RawURLEncoding.EncodeToString([]byte("dir/note.md"))
-	req := httptest.NewRequest(http.MethodGet, "/api/file?path="+encoded, nil)
+	req := httptest.NewRequest(http.MethodGet, routePrefix+"/api/file?path="+encoded, nil)
 	rec := httptest.NewRecorder()
 	s.mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || rec.Body.String() != "legacy" {
@@ -128,7 +128,7 @@ func TestHandleFileLegacyBase64URL(t *testing.T) {
 		t.Fatalf("save status = %d", rec.Code)
 	}
 	for _, missing := range []string{"missing.md", base64.RawURLEncoding.EncodeToString([]byte("notes"))} {
-		req := httptest.NewRequest(http.MethodGet, "/api/file?path="+url.QueryEscape(missing), nil)
+		req := httptest.NewRequest(http.MethodGet, routePrefix+"/api/file?path="+url.QueryEscape(missing), nil)
 		rec := httptest.NewRecorder()
 		s.mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusNotFound {
@@ -152,10 +152,10 @@ func TestRequireWireRejectsStaleClient(t *testing.T) {
 		hdr  string
 		want int
 	}{
-		{"no marker", "/api/save", "", http.StatusBadRequest},
-		{"wrong marker", "/api/save", "1", http.StatusBadRequest},
-		{"header marker", "/api/save", wireVersion, http.StatusOK},
-		{"beacon query marker", "/api/save?wire=" + wireVersion, "", http.StatusOK},
+		{"no marker", routePrefix + "/api/save", "", http.StatusBadRequest},
+		{"wrong marker", routePrefix + "/api/save", "1", http.StatusBadRequest},
+		{"header marker", routePrefix + "/api/save", wireVersion, http.StatusOK},
+		{"beacon query marker", routePrefix + "/api/save?wire=" + wireVersion, "", http.StatusOK},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, tt.url, bytes.NewReader(body))
@@ -172,11 +172,11 @@ func TestRequireWireRejectsStaleClient(t *testing.T) {
 	}
 
 	// reads are never gated: a stale tab must still be able to load what it is showing
-	req := httptest.NewRequest(http.MethodGet, "/api/tree", nil)
+	req := httptest.NewRequest(http.MethodGet, routePrefix+"/api/tree", nil)
 	rec := httptest.NewRecorder()
 	s.mux.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /api/tree status = %d, want 200", rec.Code)
+		t.Fatalf("GET tree status = %d, want 200", rec.Code)
 	}
 }
 

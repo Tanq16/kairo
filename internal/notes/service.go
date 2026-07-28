@@ -29,29 +29,11 @@ func (s *Service) GetFile(path string) ([]byte, error) {
 	return s.storage.ReadFile(path)
 }
 
-// A note is addressed by its URL path, and /api and /static are real server routes, so a note below a top-level directory of that name would have no loadable URL. Only minting a new one is refused: a vault that already contains one keeps working, since every write below it creates the parent chain.
-func (s *Service) checkReserved(p string) error {
-	first, _, _ := strings.Cut(path.Clean(p), "/")
-	if first != "api" && first != "static" {
-		return nil
-	}
-	if exists, err := s.storage.Exists(first); err == nil && exists {
-		return nil
-	}
-	return ErrReservedPath
-}
-
 func (s *Service) SaveFile(p string, content string) error {
-	if err := s.checkReserved(p); err != nil {
-		return err
-	}
 	return s.storage.SaveFile(p, []byte(content))
 }
 
 func (s *Service) CreateFile(p, content string) (string, error) {
-	if err := s.checkReserved(p); err != nil {
-		return "", err
-	}
 	ext := path.Ext(p)
 	stem := strings.TrimSuffix(p, ext)
 	// mirror UploadFile: suffix "-(N)" before the extension so a create never overwrites an existing file
@@ -71,9 +53,6 @@ func (s *Service) CreateFile(p, content string) (string, error) {
 }
 
 func (s *Service) CreateDir(p string) error {
-	if err := s.checkReserved(p); err != nil {
-		return err
-	}
 	return s.storage.CreateDir(p)
 }
 
@@ -89,9 +68,6 @@ func (s *Service) Delete(filePath string) error {
 }
 
 func (s *Service) Move(oldPath, newPath string) error {
-	if err := s.checkReserved(newPath); err != nil {
-		return err
-	}
 	oldDir := path.Dir(oldPath)
 	newDir := path.Dir(newPath)
 
@@ -256,11 +232,7 @@ func (s *Service) cleanupEmptyAttachmentsDir(dir string) {
 }
 
 func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (string, error) {
-	// the attachment lands beside the note, so the directory is what has to clear the reservation
 	dir := path.Dir(notePath)
-	if err := s.checkReserved(dir); err != nil {
-		return "", err
-	}
 	base := time.Now().Format("20060102_150405") + "_" + path.Base(filename)
 	ext := path.Ext(base)
 	stem := strings.TrimSuffix(base, ext)

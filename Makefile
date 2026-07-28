@@ -60,20 +60,22 @@ assets: ## Download static assets
 		curl -sL "$$url" -o "$(FONTS_DIR)/$$filename"; \
 	done
 	@sed -i.bak -E 's|https://fonts.gstatic.com/s/inter/[^/]+/||g' "$(CSS_DIR)/inter.css" && rm -f "$(CSS_DIR)/inter.css.bak"
-	@sed -i.bak 's|src: url(|src: url(/static/fonts/|g' "$(CSS_DIR)/inter.css" && rm -f "$(CSS_DIR)/inter.css.bak"
+	@sed -i.bak 's|src: url(|src: url(../fonts/|g' "$(CSS_DIR)/inter.css" && rm -f "$(CSS_DIR)/inter.css.bak"
 	@curl -sL "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" -H "User-Agent: Mozilla/5.0" -o "$(CSS_DIR)/jetbrains-mono.css"
 	@grep -o "https://fonts.gstatic.com/[^)']*" "$(CSS_DIR)/jetbrains-mono.css" | sort -u | while read url; do \
 		filename=$$(basename "$$url" | sed 's/?.*//'); \
 		curl -sL "$$url" -o "$(FONTS_DIR)/$$filename"; \
 	done
 	@sed -i.bak -E 's|https://fonts.gstatic.com/s/jetbrainsmono/[^/]+/||g' "$(CSS_DIR)/jetbrains-mono.css" && rm -f "$(CSS_DIR)/jetbrains-mono.css.bak"
-	@sed -i.bak 's|src: url(|src: url(/static/fonts/|g' "$(CSS_DIR)/jetbrains-mono.css" && rm -f "$(CSS_DIR)/jetbrains-mono.css.bak"
+	@sed -i.bak 's|src: url(|src: url(../fonts/|g' "$(CSS_DIR)/jetbrains-mono.css" && rm -f "$(CSS_DIR)/jetbrains-mono.css.bak"
 	@cp .github/assets/logo.svg $(STATIC_DIR)/icons/favicon.svg
 	@echo "$(GREEN)Assets downloaded$(NC)"
 
 verify-assets: ## Verify required assets exist
 	@test -f $(JS_DIR)/tailwindcss.js || (echo "$(YELLOW)tailwindcss.js missing. Run 'make assets'$(NC)" && exit 1)
 	@test -f $(CODEMIRROR_BUNDLE) || (echo "$(YELLOW)codemirror-bundle.min.js missing. Run 'make codemirror'$(NC)" && exit 1)
+	@grep -q 'url(../fonts/' "$(CSS_DIR)/inter.css" || (echo "$(YELLOW)inter.css has stale font paths. Run 'make clean && make assets'$(NC)" && exit 1)
+	@grep -q 'url(../fonts/' "$(CSS_DIR)/jetbrains-mono.css" || (echo "$(YELLOW)jetbrains-mono.css has stale font paths. Run 'make clean && make assets'$(NC)" && exit 1)
 	@echo "$(GREEN)Assets verified$(NC)"
 
 codemirror: ## Rebuild CodeMirror 6 bundle (requires Node.js)

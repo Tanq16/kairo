@@ -130,7 +130,7 @@ async function drainPendingSaves() {
             const content = pendingSaves.get(path);
             if (content === undefined) continue; // dropped by a concurrent move/discard
             try {
-                const res = await fetch('/api/save', {
+                const res = await fetch(`${KAIRO_ROUTES}/api/save`, {
                     method: 'POST',
                     headers: writeHeaders,
                     body: JSON.stringify({ path, content })
@@ -191,9 +191,9 @@ window.addEventListener('beforeunload', () => {
         // sendBeacon survives page unload; keepalive fetch is the fallback
         if (navigator.sendBeacon) {
             // sendBeacon can't set headers, so the client id rides as a query param for echo suppression
-            navigator.sendBeacon(`/api/save?client=${encodeURIComponent(KAIRO_CLIENT)}&wire=${KAIRO_WIRE}`, new Blob([body], { type: 'application/json' }));
+            navigator.sendBeacon(`${KAIRO_ROUTES}/api/save?client=${encodeURIComponent(KAIRO_CLIENT)}&wire=${KAIRO_WIRE}`, new Blob([body], { type: 'application/json' }));
         } else {
-            fetch('/api/save', { method: 'POST', headers: writeHeaders, body, keepalive: true });
+            fetch(`${KAIRO_ROUTES}/api/save`, { method: 'POST', headers: writeHeaders, body, keepalive: true });
         }
     }
     pendingSaves.clear();
@@ -233,7 +233,7 @@ async function uploadAndInsertImage(file) {
     formData.append('file', file);
     try {
         // notePath rides in the query string because FormData normalizes newlines in a field value; no Content-Type header, so the browser sets the multipart boundary
-        const res = await fetch(`/api/upload?notePath=${encodeURIComponent(currentPath)}`, { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE }, body: formData });
+        const res = await fetch(`${KAIRO_ROUTES}/api/upload?notePath=${encodeURIComponent(currentPath)}`, { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE }, body: formData });
         if (!res.ok) throw new Error('upload failed: ' + res.status);
         const imgPath = await res.text();
         view.dispatch(view.state.replaceSelection(`![Attachment](${encodeSegments(imgPath)})`));

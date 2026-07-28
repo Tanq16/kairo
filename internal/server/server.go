@@ -43,6 +43,9 @@ func New(cfg Config) *Server {
 	}
 }
 
+// Every server route hides behind one unguessable segment so that no note path can ever shadow one; a compile-time constant rather than a per-process value so bookmarks, caches and rolling restarts survive
+const routePrefix = "/_kairo-21b89d9a-af98-4aae-b036-4c9a08a216aa"
+
 func (s *Server) Setup() error {
 	storage, err := notes.NewStorage(s.config.DataDir)
 	if err != nil {
@@ -55,10 +58,10 @@ func (s *Server) Setup() error {
 	if err != nil {
 		return fmt.Errorf("failed to create static filesystem: %w", err)
 	}
-	s.mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+	s.mux.Handle(routePrefix+"/static/", http.StripPrefix(routePrefix+"/static/", http.FileServer(http.FS(staticFS))))
 
 	// API routes live on a sub-mux so the SPA catch-all can't shadow
-	// method enforcement (405) or unknown-endpoint 404s under /api/
+	// method enforcement (405) or unknown-endpoint 404s under the API subtree
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("GET /api/tree", s.handleTree)
 	apiMux.HandleFunc("GET /api/file", s.handleFile)
@@ -71,11 +74,16 @@ func (s *Server) Setup() error {
 	apiMux.HandleFunc("POST /api/upload", requireWire(s.handleUpload))
 	apiMux.HandleFunc("GET /api/events", s.handleEvents)
 	apiMux.HandleFunc("GET /api/health", s.handleHealth)
-	s.mux.Handle("/api/", apiMux)
+	s.mux.Handle(routePrefix+"/api/", http.StripPrefix(routePrefix, apiMux))
+
+	// A tab left open across the upgrade still posts to the old unprefixed endpoints; without these it would read the SPA shell as a 200 and drop the edit it was holding
+	for _, pattern := range []string{"POST /api/save", "POST /api/create-file", "POST /api/create-dir", "POST /api/delete", "POST /api/move", "POST /api/upload"} {
+		s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "Outdated client, please reload the page", http.StatusBadRequest)
+		})
+	}
 
 	s.mux.HandleFunc("/", s.handleIndex)
-
-	warnReservedNames(s.config.DataDir)
 
 	return nil
 }
@@ -91,19 +99,6 @@ func requireWire(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		next(w, r)
-	}
-}
-
-// Notes are addressed by URL path, so a top-level entry named after a real route is reachable from the file tree but never from its own URL
-func warnReservedNames(dataDir string) {
-	entries, err := os.ReadDir(dataDir)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if name := e.Name(); name == "api" || name == "static" {
-			log.Printf("WARN Top-level %q shadows a server route; notes under it open from the file tree but their URLs will not load directly", name)
-		}
 	}
 }
 

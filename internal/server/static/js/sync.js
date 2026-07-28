@@ -3,7 +3,7 @@
 let kairoEvents = null;
 
 function kairoConnect() {
-    kairoEvents = new EventSource('/api/events?client=' + encodeURIComponent(KAIRO_CLIENT));
+    kairoEvents = new EventSource(`${KAIRO_ROUTES}/api/events?client=${encodeURIComponent(KAIRO_CLIENT)}`);
     kairoEvents.onmessage = onSyncEvent;
     kairoEvents.onopen = () => setSyncConnected(true);
     kairoEvents.onerror = () => setSyncConnected(false);

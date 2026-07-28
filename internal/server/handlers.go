@@ -24,8 +24,6 @@ func writeServiceError(w http.ResponseWriter, action string, err error) {
 		http.Error(w, "Not found", http.StatusNotFound)
 	case errors.Is(err, notes.ErrExists):
 		http.Error(w, "Destination already exists", http.StatusConflict)
-	case errors.Is(err, notes.ErrReservedPath):
-		http.Error(w, "Top-level \"api\" and \"static\" are reserved by the server", http.StatusConflict)
 	default:
 		log.Printf("ERROR Failed to %s: %v", action, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
