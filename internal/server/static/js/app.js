@@ -482,7 +482,7 @@ function buildToc() {
         }
         let active = null;
         linkFor.forEach((a, h) => { a.classList.toggle('active', h === current); if (h === current) active = a; });
-        if (active && !els.tocRail.classList.contains('hidden')) keepTocLinkInView(active);
+        if (active && !els.tocRail.classList.contains('collapsed')) keepTocLinkInView(active);
     };
 
     tocScrollTarget?.removeEventListener('scroll', tocScrollHandler);
@@ -511,14 +511,14 @@ function hideToc() {
     tocScrollHandler = null;
     tocScrollTarget = null;
     els.tocRail.innerHTML = '';
-    els.tocRail.classList.add('hidden');
+    els.tocRail.classList.add('collapsed');
     els.previewGrid?.classList.add('toc-hidden');
     els.tocToggle?.classList.add('hidden');
 }
 
 function applyTocVisible() {
     const show = els.tocRail.children.length > 0 && tocVisible;
-    els.tocRail.classList.toggle('hidden', !show);
+    els.tocRail.classList.toggle('collapsed', !show);
     els.previewGrid?.classList.toggle('toc-hidden', !show);
     els.tocToggle?.classList.toggle('active', show);
     if (show) tocScrollHandler?.();

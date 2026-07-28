@@ -166,11 +166,10 @@
             grid-template-columns: minmax(0, 1fr) auto;
             column-gap: 3.5rem;
             align-items: start;
+            transition: column-gap 0.2s ease-in-out;
         }
-        .preview-grid.toc-hidden {
-            grid-template-columns: minmax(0, 1fr);
-            column-gap: 0;
-        }
+        /* The TOC track stays declared while hidden — dropping to one track is a discrete change and would snap the collapse instead of animating it */
+        .preview-grid.toc-hidden { column-gap: 0; }
         #markdown-body {
             width: 100%;
             max-width: 52rem;
@@ -188,6 +187,14 @@
             max-height: calc(100vh - 4rem);
             overflow-y: auto;
             padding-bottom: 1rem;
+            transition: width 0.2s ease-in-out, opacity 0.2s ease-in-out, visibility 0.2s;
+        }
+        /* visibility is transitioned so it flips only once the rail has finished sliding shut, keeping collapsed links out of the tab order without cutting the animation short */
+        .toc-rail.collapsed {
+            width: 0;
+            opacity: 0;
+            overflow: hidden;
+            visibility: hidden;
         }
         .toc-link {
             display: block;
@@ -527,7 +534,7 @@
             <div id="preview-container" class="absolute inset-0 z-0 overflow-y-auto custom-scrollbar p-6 md:p-12 pb-32 hidden">
                 <div class="preview-grid">
                     <article id="markdown-body" class="markdown-body"></article>
-                    <nav id="toc-rail" class="toc-rail no-print hidden"></nav>
+                    <nav id="toc-rail" class="toc-rail no-print collapsed"></nav>
                 </div>
             </div>
         </div>
