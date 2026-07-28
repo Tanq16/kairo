@@ -175,7 +175,10 @@
             width: 100%;
             max-width: 52rem;
             margin-inline: auto;
+            transition: max-width 0.2s ease-in-out;
         }
+        /* Wide mode sets the cap high enough that the surrounding panels, not the cap, decide the width; the preview's own padding still leaves a gutter */
+        #markdown-body.wide { max-width: 78rem; }
 
         .toc-rail {
             position: sticky;
@@ -207,12 +210,12 @@
         .toc-h1 { padding-left: 0.75rem; }
         .toc-h2 { padding-left: 1.5rem; }
         .toc-h3 { padding-left: 2.25rem; }
-        #toc-toggle.active {
+        #toc-toggle.active, #width-toggle.active {
             color: var(--mauve);
             background-color: var(--surface0);
         }
         @media (max-width: 767px) {
-            .toc-rail, #toc-toggle { display: none !important; }
+            .toc-rail, #toc-toggle, #width-toggle { display: none !important; }
             .preview-grid { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
         }
         /* breathing room for anchored TOC jumps at the scroll-container top */
@@ -495,6 +498,9 @@
                 </button>
                 <button id="toc-toggle" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors hidden" title="Toggle contents">
                     <i data-lucide="list" class="w-4 h-4"></i>
+                </button>
+                <button id="width-toggle" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors" title="Toggle wide preview">
+                    <i data-lucide="unfold-horizontal" class="w-4 h-4"></i>
                 </button>
                 <button id="theme-toggle" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors" title="Toggle theme">
                     <i data-lucide="sun" class="w-4 h-4"></i>
