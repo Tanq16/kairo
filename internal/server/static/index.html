@@ -48,17 +48,17 @@
             --base: #1e1e2e; --mantle: #181825; --crust: #11111b;
         }
 
-        /* Catppuccin Latte — neutrals re-leveled for a white canvas */
+        /* Catppuccin Latte, re-slotted: the neutrals shift one step lighter because the layout treats crust as the page and mantle as the panel above it, an order that only holds while the ramp runs dark-to-light; mauve and blue are the harshest colors here and carry the most repeated elements, so each trades with a softer neighbor — traded rather than overwritten, since all four are entries in mermaid's twelve-color scales */
         :root:not(.dark) {
             --rosewater: #dc8a78; --flamingo: #dd7878; --pink: #ea76cb;
-            --mauve: #8839ef; --red: #d20f39; --maroon: #e64553;
+            --mauve: #7287fd; --red: #d20f39; --maroon: #e64553;
             --peach: #fe640b; --yellow: #df8e1d; --green: #40a02b;
-            --teal: #179299; --sky: #04a5e5; --sapphire: #209fb5;
-            --blue: #1e66f5; --lavender: #7287fd; --text: #4c4f69;
+            --teal: #179299; --sky: #04a5e5; --sapphire: #1e66f5;
+            --blue: #209fb5; --lavender: #8839ef; --text: #4c4f69;
             --subtext1: #5c5f77; --subtext0: #6c6f85; --overlay2: #7c7f93;
-            --overlay1: #8c8fa1; --overlay0: #9ca0b0; --surface2: #ccd0da;
-            --surface1: #dcdfe7; --surface0: #e9ecf1;
-            --base: #ffffff; --mantle: #f5f6f9; --crust: #ffffff;
+            --overlay1: #8c8fa1; --overlay0: #9ca0b0; --surface2: #bcc0cc;
+            --surface1: #ccd0da; --surface0: #dce0e8;
+            --base: #eff1f5; --mantle: #e6e9ef; --crust: #eff1f5;
         }
 
         /* Scrollbar */
@@ -166,16 +166,18 @@
             grid-template-columns: minmax(0, 1fr) auto;
             column-gap: 3.5rem;
             align-items: start;
+            transition: column-gap 0.2s ease-in-out;
         }
-        .preview-grid.toc-hidden {
-            grid-template-columns: minmax(0, 1fr);
-            column-gap: 0;
-        }
+        /* The TOC track stays declared while hidden — dropping to one track is a discrete change and would snap the collapse instead of animating it */
+        .preview-grid.toc-hidden { column-gap: 0; }
         #markdown-body {
             width: 100%;
             max-width: 52rem;
             margin-inline: auto;
+            transition: max-width 0.2s ease-in-out;
         }
+        /* Wide mode sets the cap high enough that the surrounding panels, not the cap, decide the width */
+        #markdown-body.wide { max-width: 78rem; }
 
         .toc-rail {
             position: sticky;
@@ -185,6 +187,14 @@
             max-height: calc(100vh - 4rem);
             overflow-y: auto;
             padding-bottom: 1rem;
+            transition: width 0.2s ease-in-out, opacity 0.2s ease-in-out, visibility 0.2s;
+        }
+        /* visibility is in the transition so it flips only after the rail slides shut, keeping collapsed links out of the tab order */
+        .toc-rail.collapsed {
+            width: 0;
+            opacity: 0;
+            overflow: hidden;
+            visibility: hidden;
         }
         .toc-link {
             display: block;
@@ -207,12 +217,12 @@
         .toc-h1 { padding-left: 0.75rem; }
         .toc-h2 { padding-left: 1.5rem; }
         .toc-h3 { padding-left: 2.25rem; }
-        #toc-toggle.active {
+        #toc-toggle.active, #width-toggle.active {
             color: var(--mauve);
             background-color: var(--surface0);
         }
         @media (max-width: 767px) {
-            .toc-rail, #toc-toggle { display: none !important; }
+            .toc-rail, #toc-toggle, #width-toggle { display: none !important; }
             .preview-grid { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
         }
         /* breathing room for anchored TOC jumps at the scroll-container top */
@@ -496,6 +506,9 @@
                 <button id="toc-toggle" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors hidden" title="Toggle contents">
                     <i data-lucide="list" class="w-4 h-4"></i>
                 </button>
+                <button id="width-toggle" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors" title="Toggle wide preview">
+                    <i data-lucide="unfold-horizontal" class="w-4 h-4"></i>
+                </button>
                 <button id="theme-toggle" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors" title="Toggle theme">
                     <i data-lucide="sun" class="w-4 h-4"></i>
                 </button>
@@ -521,7 +534,7 @@
             <div id="preview-container" class="absolute inset-0 z-0 overflow-y-auto custom-scrollbar p-6 md:p-12 pb-32 hidden">
                 <div class="preview-grid">
                     <article id="markdown-body" class="markdown-body"></article>
-                    <nav id="toc-rail" class="toc-rail no-print hidden"></nav>
+                    <nav id="toc-rail" class="toc-rail no-print collapsed"></nav>
                 </div>
             </div>
         </div>

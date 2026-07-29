@@ -5,6 +5,7 @@ const els = {
     markdownBody: document.getElementById('markdown-body'),
     tocRail: document.getElementById('toc-rail'),
     tocToggle: document.getElementById('toc-toggle'),
+    widthToggle: document.getElementById('width-toggle'),
     previewGrid: document.querySelector('#preview-container .preview-grid'),
     fileTree: document.getElementById('file-tree'),
     filenameDisplay: document.getElementById('current-filename'),
@@ -240,6 +241,15 @@ function toggleTheme() {
     queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
 }
 
+const WIDE_KEY = 'kairo-wide-preview';
+let wideMode = localStorage.getItem(WIDE_KEY) === 'true';
+
+function applyWideMode() {
+    els.markdownBody.classList.toggle('wide', wideMode);
+    els.widthToggle.classList.toggle('active', wideMode);
+    els.widthToggle.innerHTML = `<i data-lucide="${wideMode ? 'fold-horizontal' : 'unfold-horizontal'}" class="w-4 h-4"></i>`;
+}
+
 let renderChain = Promise.resolve();
 function queueRender(fn) {
     renderChain = renderChain.then(fn).catch(() => {});
@@ -281,6 +291,7 @@ function runPrint(theme, scale) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     setThemeIcon();
+    applyWideMode();
     lucide.createIcons();
     initMarked();
     initEditor();
@@ -471,7 +482,7 @@ function buildToc() {
         }
         let active = null;
         linkFor.forEach((a, h) => { a.classList.toggle('active', h === current); if (h === current) active = a; });
-        if (active && !els.tocRail.classList.contains('hidden')) keepTocLinkInView(active);
+        if (active && !els.tocRail.classList.contains('collapsed')) keepTocLinkInView(active);
     };
 
     tocScrollTarget?.removeEventListener('scroll', tocScrollHandler);
@@ -500,14 +511,14 @@ function hideToc() {
     tocScrollHandler = null;
     tocScrollTarget = null;
     els.tocRail.innerHTML = '';
-    els.tocRail.classList.add('hidden');
+    els.tocRail.classList.add('collapsed');
     els.previewGrid?.classList.add('toc-hidden');
     els.tocToggle?.classList.add('hidden');
 }
 
 function applyTocVisible() {
     const show = els.tocRail.children.length > 0 && tocVisible;
-    els.tocRail.classList.toggle('hidden', !show);
+    els.tocRail.classList.toggle('collapsed', !show);
     els.previewGrid?.classList.toggle('toc-hidden', !show);
     els.tocToggle?.classList.toggle('active', show);
     if (show) tocScrollHandler?.();
@@ -579,6 +590,12 @@ function initEventListeners() {
 
     els.previewBtn.addEventListener('click', () => togglePreview());
     els.themeToggle.addEventListener('click', toggleTheme);
+    els.widthToggle.addEventListener('click', () => {
+        wideMode = !wideMode;
+        localStorage.setItem(WIDE_KEY, String(wideMode));
+        applyWideMode();
+        lucide.createIcons();
+    });
     if (els.printBtn) {
         els.printBtn.addEventListener('click', () => els.printModal.backdrop.classList.remove('hidden'));
         els.printModal.cancel.addEventListener('click', () => els.printModal.backdrop.classList.add('hidden'));
