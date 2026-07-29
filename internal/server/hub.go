@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,6 +27,7 @@ type hub struct {
 	unregister chan *client
 	broadcast  chan Event
 	clients    map[*client]bool
+	count      atomic.Int64
 	done       chan struct{}
 	wg         sync.WaitGroup
 }
@@ -45,6 +47,7 @@ func (h *hub) run() {
 		select {
 		case c := <-h.register:
 			h.clients[c] = true
+			h.count.Add(1)
 		case c := <-h.unregister:
 			h.drop(c)
 		case ev := <-h.broadcast:
@@ -68,8 +71,14 @@ func (h *hub) run() {
 func (h *hub) drop(c *client) {
 	if _, ok := h.clients[c]; ok {
 		delete(h.clients, c)
+		h.count.Add(-1)
 		close(c.send)
 	}
+}
+
+// clients is run()-owned, so the scanner reads this counter rather than the map to decide whether a walk is worth doing
+func (h *hub) hasClients() bool {
+	return h.count.Load() > 0
 }
 
 func (h *hub) emit(ev Event) {

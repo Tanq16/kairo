@@ -32,6 +32,7 @@ type Server struct {
 	hub     *hub
 	tokens  *tokenTable
 	saveMu  sync.Mutex
+	rescan  chan struct{}
 }
 
 func New(cfg Config) *Server {
@@ -40,6 +41,8 @@ func New(cfg Config) *Server {
 		mux:    http.NewServeMux(),
 		hub:    newHub(),
 		tokens: newTokenTable(),
+		// buffered by one: a queued scan already covers whatever a second caller would have asked for
+		rescan: make(chan struct{}, 1),
 	}
 }
 
@@ -53,6 +56,7 @@ func (s *Server) Setup() error {
 	}
 	s.service = notes.NewService(storage)
 	s.hub.wg.Go(s.hub.run)
+	s.hub.wg.Go(s.watch)
 
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -71,6 +75,7 @@ func (s *Server) Setup() error {
 	apiMux.HandleFunc("POST /api/delete", requireWire(s.handleDelete))
 	apiMux.HandleFunc("POST /api/move", requireWire(s.handleMove))
 	apiMux.HandleFunc("POST /api/upload", requireWire(s.handleUpload))
+	apiMux.HandleFunc("POST /api/rescan", s.handleRescan)
 	apiMux.HandleFunc("GET /api/events", s.handleEvents)
 	apiMux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.Handle(routePrefix+"/api/", http.StripPrefix(routePrefix, apiMux))

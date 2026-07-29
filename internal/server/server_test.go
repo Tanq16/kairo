@@ -11,6 +11,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -523,4 +525,187 @@ func TestHubConcurrent(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func TestDiffScan(t *testing.T) {
+	early := time.Unix(1700000000, 0)
+	late := early.Add(time.Second)
+	file := func(size int64, mod time.Time) notes.FileState {
+		return notes.FileState{Size: size, ModTime: mod}
+	}
+	dir := func(mod time.Time) notes.FileState {
+		return notes.FileState{ModTime: mod, IsDir: true}
+	}
+
+	tests := []struct {
+		name string
+		prev map[string]notes.FileState
+		cur  map[string]notes.FileState
+		want []scanChange
+	}{
+		{
+			name: "identical snapshots report nothing",
+			prev: map[string]notes.FileState{"a.md": file(3, early), "d": dir(early)},
+			cur:  map[string]notes.FileState{"a.md": file(3, early), "d": dir(early)},
+		},
+		{
+			name: "no previous snapshot makes everything new",
+			cur:  map[string]notes.FileState{"a.md": file(3, early)},
+			want: []scanChange{{op: "create", path: "a.md", size: 3}},
+		},
+		{
+			name: "appearing file and its directory both report, parent first",
+			prev: map[string]notes.FileState{},
+			cur:  map[string]notes.FileState{"d/a.md": file(3, early), "d": dir(early)},
+			want: []scanChange{{op: "createDir", path: "d"}, {op: "create", path: "d/a.md", size: 3}},
+		},
+		{
+			name: "vanished path reports a delete",
+			prev: map[string]notes.FileState{"a.md": file(3, early)},
+			cur:  map[string]notes.FileState{},
+			want: []scanChange{{op: "delete", path: "a.md"}},
+		},
+		{
+			name: "later mtime at the same size reports a save",
+			prev: map[string]notes.FileState{"a.md": file(3, early)},
+			cur:  map[string]notes.FileState{"a.md": file(3, late)},
+			want: []scanChange{{op: "save", path: "a.md", size: 3}},
+		},
+		// Whole-second mtime granularity (HFS+, some NFS) can hide a rewrite inside one second, so size has to be compared too
+		{
+			name: "different size at the same mtime reports a save",
+			prev: map[string]notes.FileState{"a.md": file(3, early)},
+			cur:  map[string]notes.FileState{"a.md": file(9, early)},
+			want: []scanChange{{op: "save", path: "a.md", size: 9}},
+		},
+		// A directory's mtime moves whenever an entry is added or removed; the entries themselves already report that
+		{
+			name: "touched directory reports nothing",
+			prev: map[string]notes.FileState{"d": dir(early)},
+			cur:  map[string]notes.FileState{"d": dir(late)},
+		},
+		{
+			name: "file replaced by a directory reports the directory",
+			prev: map[string]notes.FileState{"x": file(3, early)},
+			cur:  map[string]notes.FileState{"x": dir(late)},
+			want: []scanChange{{op: "createDir", path: "x"}},
+		},
+		{
+			name: "directory replaced by a file reports the file",
+			prev: map[string]notes.FileState{"x": dir(early)},
+			cur:  map[string]notes.FileState{"x": file(3, late)},
+			want: []scanChange{{op: "create", path: "x", size: 3}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := diffScan(tt.prev, tt.cur)
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("diffScan = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func mustNotRecv(t *testing.T, ch <-chan Event) {
+	t.Helper()
+	select {
+	case ev, ok := <-ch:
+		if ok {
+			t.Fatalf("unexpected event %+v", ev)
+		}
+		t.Fatal("send channel closed unexpectedly")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// The token table is what lets the scanner run alongside the write handlers: bytes clients already know about must not come back at them as a remote change
+func TestEmitContentChangeSuppressesKnownContent(t *testing.T) {
+	const viaAPI = "written through the API"
+	const viaDisk = "written behind the API"
+
+	s := newTestServer(t)
+	if rec := saveNote(t, s, "note.md", viaAPI); rec.Code != http.StatusOK {
+		t.Fatalf("save status = %d", rec.Code)
+	}
+
+	c := registerClient(t, s.hub, 4)
+	defer unregisterClient(t, s.hub, c)
+
+	s.emitContentChange("save", "note.md", int64(len(viaAPI)))
+	mustNotRecv(t, c.send)
+
+	if err := os.WriteFile(filepath.Join(s.config.DataDir, "note.md"), []byte(viaDisk), 0644); err != nil {
+		t.Fatalf("external write: %v", err)
+	}
+	s.emitContentChange("save", "note.md", int64(len(viaDisk)))
+
+	ev := mustRecv(t, c.send)
+	if ev.Op != "save" || ev.Path != "note.md" {
+		t.Fatalf("event = %+v, want a save of note.md", ev)
+	}
+	if ev.Origin != "" {
+		t.Fatalf("event origin = %q, want empty so no client filters it out as its own echo", ev.Origin)
+	}
+	if ev.Token != contentToken([]byte(viaDisk)) {
+		t.Fatalf("event token = %q, want the token of the bytes on disk", ev.Token)
+	}
+}
+
+// An external writer is not held to the upload cap, so an oversized file must be announced without being read into memory to hash
+func TestEmitContentChangeSkipsOversizedFile(t *testing.T) {
+	s := newTestServer(t)
+	c := registerClient(t, s.hub, 4)
+	defer unregisterClient(t, s.hub, c)
+
+	// the file is never created: reaching the filesystem at all would fail this
+	s.emitContentChange("create", "huge.bin", maxHashBytes+1)
+
+	ev := mustRecv(t, c.send)
+	if ev.Op != "create" || ev.Path != "huge.bin" {
+		t.Fatalf("event = %+v, want a create of huge.bin", ev)
+	}
+	if ev.Token != "" {
+		t.Fatalf("event token = %q, want none", ev.Token)
+	}
+}
+
+// A bulk change must not outrun a client's send buffer: the hub drops whoever overflows, so the whole fleet would flap on a git checkout
+func TestEmitChangesCoalescesBulkChange(t *testing.T) {
+	s := newTestServer(t)
+	c := registerClient(t, s.hub, 2)
+	defer unregisterClient(t, s.hub, c)
+
+	changes := make([]scanChange, 0, maxScanEvents+1)
+	for i := range maxScanEvents + 1 {
+		changes = append(changes, scanChange{op: "delete", path: fmt.Sprintf("gone-%d.md", i)})
+	}
+	s.emitChanges(changes)
+
+	if ev := mustRecv(t, c.send); ev.Op != "rescan" {
+		t.Fatalf("event = %+v, want a single rescan", ev)
+	}
+	mustNotRecv(t, c.send)
+	if !s.hub.hasClients() {
+		t.Fatal("client was dropped, so a bulk change disconnects every viewer")
+	}
+}
+
+// Nothing drains the kick channel until the scanner comes round, so a caller must never be left holding the request open
+func TestHandleRescanNeverBlocks(t *testing.T) {
+	s := New(Config{DataDir: t.TempDir()})
+	for range 3 {
+		req := httptest.NewRequest(http.MethodPost, routePrefix+"/api/rescan", nil)
+		rec := httptest.NewRecorder()
+		s.handleRescan(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("rescan status = %d, want %d", rec.Code, http.StatusOK)
+		}
+	}
+	select {
+	case <-s.rescan:
+	default:
+		t.Fatal("no scan queued")
+	}
 }
