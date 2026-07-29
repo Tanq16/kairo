@@ -76,7 +76,7 @@ func (h *hub) drop(c *client) {
 	}
 }
 
-// clients is run()-owned, so the scanner reads this counter rather than the map to decide whether a walk is worth doing
+// clients is run()-owned; len() from another goroutine would race
 func (h *hub) hasClients() bool {
 	return h.count.Load() > 0
 }

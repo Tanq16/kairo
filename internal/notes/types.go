@@ -36,7 +36,6 @@ type ActionRequest struct {
 	NewPath string `json:"newPath,omitempty"`
 }
 
-// FileState is the cheap change signal a scan compares, so only the files whose signal moved have to be re-read and hashed
 type FileState struct {
 	Size    int64
 	ModTime time.Time

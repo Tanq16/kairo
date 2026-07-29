@@ -58,7 +58,7 @@ function handleRemoteDelete(path) {
     }
 }
 
-// A coalesced change names no path, so the open note is rechecked directly, existence first: applyRemote reads a deleted file as a failed fetch and returns quietly, leaving a live buffer for autosave to write back over the deletion
+// Existence first: applyRemote reads a deleted file as a failed fetch and returns quietly, leaving a live buffer for autosave to write back
 async function revalidateOpenPath() {
     const path = currentPath;
     if (!path) return;
@@ -66,14 +66,14 @@ async function revalidateOpenPath() {
     try {
         res = await fetch(fileApiUrl(path), { method: 'HEAD' });
     } catch (e) {
-        return; // offline or mid-reload; the next event or resync tries again
+        return;
     }
     if (path !== currentPath) return;
     if (res.status === 404) {
         handleRemoteDelete(path);
         return;
     }
-    // only a clean buffer is patched — the change may well have been to another file in the batch, and a dirty one must not be warned about somebody else's edit
+    // the change may have been to another file in the batch, so a dirty buffer is left alone
     if (!unsaved && !hasPendingSave(path)) applyRemote(path);
 }
 

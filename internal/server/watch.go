@@ -11,10 +11,10 @@ import (
 
 const scanInterval = 2 * time.Second
 
-// Past this many changed paths one coarse event stands in for all of them: the hub drops a client whose 16-deep send buffer overflows, so a bulk change like a git checkout must not arrive as a per-path storm
+// The hub drops a client whose 16-deep send buffer overflows, so a bulk change must not arrive as a per-path storm
 const maxScanEvents = 12
 
-// Matches the upload cap, since nothing written through the app can exceed it; a file dropped into the data directory by other means is bounded by nothing, and hashing it means reading it whole
+// Matches the upload cap; an external writer is bound by nothing, and hashing means reading the file whole
 const maxHashBytes = 10 << 20
 
 type scanChange struct {
@@ -23,7 +23,6 @@ type scanChange struct {
 	size int64
 }
 
-// Changes made outside the app — an agent, an editor, a git pull — reach clients only through this loop; it shares the hub's lifecycle because feeding the hub is all it does
 func (s *Server) watch() {
 	prev, err := s.service.Scan()
 	if err != nil {
@@ -39,14 +38,14 @@ func (s *Server) watch() {
 		case <-ticker.C:
 		}
 
-		// Scanning with nobody listening would advance the snapshot past changes no client ever heard about, so the gate covers the kick as well as the tick; the first scan after someone connects then still reports whatever accumulated
+		// Advancing the snapshot with nobody listening would discard changes no client ever heard about
 		if !s.hub.hasClients() {
 			continue
 		}
 
 		cur, err := s.service.Scan()
 		if err != nil {
-			// A half-finished walk would read as a pile of deletes, so keep the old snapshot and let the next tick retry
+			// A half-finished walk would read as a pile of deletes
 			log.Printf("ERROR Failed to scan data directory: %v", err)
 			continue
 		}
@@ -84,7 +83,7 @@ func (s *Server) emitChanges(changes []scanChange) {
 		return
 	}
 	if len(changes) > maxScanEvents {
-		// The coarse event carries no path, so nothing downstream can record what these bytes now are. Dropping every token the batch touched keeps a later change back to pre-batch content from hashing equal to a stale entry and being suppressed as a no-op
+		// The coarse event names no path, so a token left here would silently suppress a later change back to these bytes
 		for _, ch := range changes {
 			s.tokens.dropTree(ch.path)
 		}
@@ -104,10 +103,10 @@ func (s *Server) emitChanges(changes []scanChange) {
 	}
 }
 
-// saveMu covers read+token+emit so an interleaved handleSave cannot record this token first and then suppress its own event — the saving client would see its own write come back as a remote change
+// saveMu is held across read+token+emit so an interleaved handleSave can't record this token first and leave its own event unsent
 func (s *Server) emitContentChange(op, path string, size int64) {
 	if size > maxHashBytes {
-		// Still worth announcing so the tree refreshes; without a token no client tries to patch it into an editor, which is right for something this size
+		// No token, so no client tries to patch it into an editor
 		s.hub.emit(Event{Op: op, Path: path})
 		return
 	}
@@ -115,10 +114,9 @@ func (s *Server) emitContentChange(op, path string, size int64) {
 	defer s.saveMu.Unlock()
 	content, err := s.service.GetFile(path)
 	if err != nil {
-		return // vanished or unreadable since the walk; the next scan reports it as a delete
+		return // vanished since the walk; the next scan reports it as a delete
 	}
 	token := contentToken(content)
-	// The token table is what makes this safe to run alongside the write handlers: bytes clients were already told about emit nothing, so a save made through the API never echoes back
 	if !s.tokens.changed(path, token) {
 		return
 	}

@@ -95,7 +95,7 @@ func (s *FileStorage) GetTree() (*FileNode, error) {
 	return root, nil
 }
 
-// The dotfile skip mirrors GetTree's deliberately: a path the tree never shows must not generate a change event either, and it keeps .trash and the .kairo-save-* temps out of the diff
+// Skip rule must match GetTree's: a path the tree never shows must not raise a change event either
 func (s *FileStorage) Scan() (map[string]FileState, error) {
 	states := make(map[string]FileState)
 	err := filepath.WalkDir(s.dataDir, func(path string, d fs.DirEntry, err error) error {

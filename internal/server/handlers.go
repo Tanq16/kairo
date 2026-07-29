@@ -231,7 +231,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
-// Lets whatever wrote to the data directory announce it instead of waiting out the poll interval; deliberately outside requireWire, since the caller is a script or an agent with no client wire version to send
+// Outside requireWire deliberately: the caller is a script with no client wire version to send
 func (s *Server) handleRescan(w http.ResponseWriter, r *http.Request) {
 	select {
 	case s.rescan <- struct{}{}:
