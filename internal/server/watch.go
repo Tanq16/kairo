@@ -74,7 +74,6 @@ func diffScan(prev, cur map[string]notes.FileState) []scanChange {
 			changes = append(changes, scanChange{op: "delete", path: path})
 		}
 	}
-	// Sorting by path puts a new directory ahead of the files that appeared inside it
 	slices.SortFunc(changes, func(a, b scanChange) int { return cmp.Compare(a.path, b.path) })
 	return changes
 }

@@ -41,7 +41,7 @@ func New(cfg Config) *Server {
 		mux:    http.NewServeMux(),
 		hub:    newHub(),
 		tokens: newTokenTable(),
-		// buffered by one: a queued scan already covers whatever a second caller would have asked for
+		// a queued scan already covers whatever a second caller would have asked for
 		rescan: make(chan struct{}, 1),
 	}
 }
