@@ -37,10 +37,11 @@ func (s *Server) watch() {
 			return
 		case <-s.rescan:
 		case <-ticker.C:
-			// With nobody listening the snapshot stays put, so the first scan after a client connects still reports whatever accumulated while it was idle
-			if !s.hub.hasClients() {
-				continue
-			}
+		}
+
+		// Scanning with nobody listening would advance the snapshot past changes no client ever heard about, so the gate covers the kick as well as the tick; the first scan after someone connects then still reports whatever accumulated
+		if !s.hub.hasClients() {
+			continue
 		}
 
 		cur, err := s.service.Scan()
@@ -83,6 +84,10 @@ func (s *Server) emitChanges(changes []scanChange) {
 		return
 	}
 	if len(changes) > maxScanEvents {
+		// The coarse event carries no path, so nothing downstream can record what these bytes now are. Dropping every token the batch touched keeps a later change back to pre-batch content from hashing equal to a stale entry and being suppressed as a no-op
+		for _, ch := range changes {
+			s.tokens.dropTree(ch.path)
+		}
 		s.hub.emit(Event{Op: "rescan"})
 		return
 	}

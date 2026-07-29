@@ -27,8 +27,7 @@ function onSyncEvent(e) {
     if (ev.op !== 'save') scheduleTreeRefresh();
 
     if (ev.op === 'rescan') {
-        // a coalesced bulk change names no path, so a dirty buffer is left alone here rather than warned about a file the user may not even have open
-        if (currentPath && !unsaved && !hasPendingSave(currentPath)) applyRemote(currentPath);
+        revalidateOpenPath();
         return;
     }
     if (ev.op === 'move') {
@@ -42,17 +41,40 @@ function onSyncEvent(e) {
         return;
     }
     if (ev.op === 'delete') {
-        // a queued autosave for this path would resurrect the deleted file, so drop it
-        discardPendingSave(ev.path);
-        if (currentPath && (currentPath === ev.path || currentPath.startsWith(ev.path + '/'))) {
-            showToast('This note was deleted elsewhere', 'warning');
-            goHome('replace');
-        }
+        handleRemoteDelete(ev.path);
         return;
     }
     if ((ev.op === 'save' || ev.op === 'create') && ev.path === currentPath && ev.token && ev.token !== currentFileToken) {
         applyRemote(ev.path);
     }
+}
+
+function handleRemoteDelete(path) {
+    // a queued autosave for this path would resurrect the deleted file, so drop it
+    discardPendingSave(path);
+    if (currentPath && (currentPath === path || currentPath.startsWith(path + '/'))) {
+        showToast('This note was deleted elsewhere', 'warning');
+        goHome('replace');
+    }
+}
+
+// A coalesced change names no path, so the open note is rechecked directly, existence first: applyRemote reads a deleted file as a failed fetch and returns quietly, leaving a live buffer for autosave to write back over the deletion
+async function revalidateOpenPath() {
+    const path = currentPath;
+    if (!path) return;
+    let res;
+    try {
+        res = await fetch(fileApiUrl(path), { method: 'HEAD' });
+    } catch (e) {
+        return; // offline or mid-reload; the next event or resync tries again
+    }
+    if (path !== currentPath) return;
+    if (res.status === 404) {
+        handleRemoteDelete(path);
+        return;
+    }
+    // only a clean buffer is patched — the change may well have been to another file in the batch, and a dirty one must not be warned about somebody else's edit
+    if (!unsaved && !hasPendingSave(path)) applyRemote(path);
 }
 
 async function applyRemote(path) {
@@ -113,9 +135,7 @@ function kairoResync() {
         kairoConnect();
     }
     scheduleTreeRefresh();
-    if (currentPath && !unsaved && !hasPendingSave(currentPath)) {
-        applyRemote(currentPath);
-    }
+    revalidateOpenPath();
 }
 
 function setSyncConnected(ok) {

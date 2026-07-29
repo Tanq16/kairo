@@ -692,6 +692,65 @@ func TestEmitChangesCoalescesBulkChange(t *testing.T) {
 	}
 }
 
+// A coalesced batch tells clients nothing about content, so the tokens it skipped must not survive to suppress a later change that restores the pre-batch bytes
+func TestEmitChangesCoalesceClearsTokens(t *testing.T) {
+	const original = "original"
+
+	s := newTestServer(t)
+	if rec := saveNote(t, s, "note.md", original); rec.Code != http.StatusOK {
+		t.Fatalf("save status = %d", rec.Code)
+	}
+
+	c := registerClient(t, s.hub, 4)
+	defer unregisterClient(t, s.hub, c)
+
+	changes := []scanChange{{op: "save", path: "note.md", size: 99}}
+	for i := range maxScanEvents {
+		changes = append(changes, scanChange{op: "create", path: fmt.Sprintf("bulk-%d.md", i), size: 1})
+	}
+	s.emitChanges(changes)
+	if ev := mustRecv(t, c.send); ev.Op != "rescan" {
+		t.Fatalf("event = %+v, want a single rescan", ev)
+	}
+
+	// note.md now holds the pre-batch bytes again; while the batch's stale token stands this hashes equal to it and is swallowed
+	s.emitContentChange("save", "note.md", int64(len(original)))
+	ev := mustRecv(t, c.send)
+	if ev.Op != "save" || ev.Path != "note.md" {
+		t.Fatalf("event = %+v, want a save of note.md", ev)
+	}
+	if ev.Token != contentToken([]byte(original)) {
+		t.Fatalf("event token = %q, want the restored content's token", ev.Token)
+	}
+}
+
+// The client tells a deleted note apart from a failed fetch by status alone, so the GET route has to answer HEAD
+func TestHandleFileAnswersHEAD(t *testing.T) {
+	s := newTestServer(t)
+	if rec := saveNote(t, s, "note.md", "body"); rec.Code != http.StatusOK {
+		t.Fatalf("save status = %d", rec.Code)
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want int
+	}{
+		{"open note still there", "note.md", http.StatusOK},
+		{"open note deleted underneath", "gone.md", http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodHead, routePrefix+"/api/file?path="+url.QueryEscape(tt.path), nil)
+			rec := httptest.NewRecorder()
+			s.mux.ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("HEAD %q status = %d, want %d", tt.path, rec.Code, tt.want)
+			}
+		})
+	}
+}
+
 // Nothing drains the kick channel until the scanner comes round, so a caller must never be left holding the request open
 func TestHandleRescanNeverBlocks(t *testing.T) {
 	s := New(Config{DataDir: t.TempDir()})
