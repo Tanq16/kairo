@@ -26,6 +26,11 @@ function onSyncEvent(e) {
 
     if (ev.op !== 'save') scheduleTreeRefresh();
 
+    if (ev.op === 'rescan') {
+        // a coalesced bulk change names no path, so a dirty buffer is left alone here rather than warned about a file the user may not even have open
+        if (currentPath && !unsaved && !hasPendingSave(currentPath)) applyRemote(currentPath);
+        return;
+    }
     if (ev.op === 'move') {
         if (currentPath && (currentPath === ev.path || currentPath.startsWith(ev.path + '/'))) {
             const rebased = ev.newPath + currentPath.slice(ev.path.length);
@@ -40,7 +45,7 @@ function onSyncEvent(e) {
         // a queued autosave for this path would resurrect the deleted file, so drop it
         discardPendingSave(ev.path);
         if (currentPath && (currentPath === ev.path || currentPath.startsWith(ev.path + '/'))) {
-            showToast('This note was deleted on another device', 'warning');
+            showToast('This note was deleted elsewhere', 'warning');
             goHome('replace');
         }
         return;
@@ -53,7 +58,7 @@ function onSyncEvent(e) {
 async function applyRemote(path) {
     if (editorPath !== path) return; // only patch an open editable note; images/folders leave editorPath null, so their stale CM doc is never clobbered
     if (unsaved || hasPendingSave(path)) {
-        showToast('This note changed on another device', 'info');
+        showToast('This note changed elsewhere', 'info');
         return;
     }
     try {
