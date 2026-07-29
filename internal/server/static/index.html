@@ -48,7 +48,7 @@
             --base: #1e1e2e; --mantle: #181825; --crust: #11111b;
         }
 
-        /* Catppuccin Latte, re-slotted for a light canvas. The neutrals shift one step lighter because the layout treats crust as the page and mantle as the panel above it, an ordering that only reads right while the ramp runs dark-to-light. Two accent pairs then trade places rather than being overwritten, so mermaid's twelve-colour pie and git scales keep twelve distinct entries: mauve/lavender, to land the palette's most saturated purple on the once-per-note H1 instead of every H2, the brand and the TOC; blue/sapphire, because Latte's blue is a hard cobalt that Mocha's pastel equivalent never is. */
+        /* Catppuccin Latte, re-slotted: the neutrals shift one step lighter because the layout treats crust as the page and mantle as the panel above it, an order that only holds while the ramp runs dark-to-light; mauve and blue are the harshest colors here and carry the most repeated elements, so each trades with a softer neighbor — traded rather than overwritten, since all four are entries in mermaid's twelve-color scales */
         :root:not(.dark) {
             --rosewater: #dc8a78; --flamingo: #dd7878; --pink: #ea76cb;
             --mauve: #7287fd; --red: #d20f39; --maroon: #e64553;
@@ -176,7 +176,7 @@
             margin-inline: auto;
             transition: max-width 0.2s ease-in-out;
         }
-        /* Wide mode sets the cap high enough that the surrounding panels, not the cap, decide the width; the preview's own padding still leaves a gutter */
+        /* Wide mode sets the cap high enough that the surrounding panels, not the cap, decide the width */
         #markdown-body.wide { max-width: 78rem; }
 
         .toc-rail {
@@ -189,7 +189,7 @@
             padding-bottom: 1rem;
             transition: width 0.2s ease-in-out, opacity 0.2s ease-in-out, visibility 0.2s;
         }
-        /* visibility is transitioned so it flips only once the rail has finished sliding shut, keeping collapsed links out of the tab order without cutting the animation short */
+        /* visibility is in the transition so it flips only after the rail slides shut, keeping collapsed links out of the tab order */
         .toc-rail.collapsed {
             width: 0;
             opacity: 0;
