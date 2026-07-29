@@ -3,6 +3,7 @@ package notes
 import (
 	"errors"
 	"io"
+	"time"
 )
 
 // Sentinels let handlers map storage failures to HTTP statuses without leaking paths.
@@ -35,8 +36,16 @@ type ActionRequest struct {
 	NewPath string `json:"newPath,omitempty"`
 }
 
+// FileState is the cheap change signal a scan compares, so only the files whose signal moved have to be re-read and hashed
+type FileState struct {
+	Size    int64
+	ModTime time.Time
+	IsDir   bool
+}
+
 type Store interface {
 	GetTree() (*FileNode, error)
+	Scan() (map[string]FileState, error)
 	ReadFile(path string) ([]byte, error)
 	SaveFile(path string, content []byte) error
 	SaveFileFrom(path string, r io.Reader) error

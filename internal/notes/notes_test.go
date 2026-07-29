@@ -2,6 +2,7 @@ package notes
 
 import (
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -465,6 +466,75 @@ func TestGetTree(t *testing.T) {
 		deep := findChild(t, sub, "deep.md")
 		if deep.Path != filepath.Join("docs", "sub", "deep.md") {
 			t.Fatalf("deep node path = %q, want %q", deep.Path, filepath.Join("docs", "sub", "deep.md"))
+		}
+	})
+}
+
+func TestScan(t *testing.T) {
+	t.Run("empty data dir skips the trash it just created", func(t *testing.T) {
+		s := newTestStorage(t)
+		states, err := s.Scan()
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		if len(states) != 0 {
+			t.Fatalf("empty data dir scanned %v, want none", slices.Sorted(maps.Keys(states)))
+		}
+	})
+
+	t.Run("keys are slash-separated relative paths", func(t *testing.T) {
+		s := newTestStorage(t)
+		writeFile(t, s, "root.md", "r")
+		writeFile(t, s, "docs/sub/deep.md", "dd")
+
+		states, err := s.Scan()
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		want := []string{"docs", "docs/sub", "docs/sub/deep.md", "root.md"}
+		if got := slices.Sorted(maps.Keys(states)); !slices.Equal(got, want) {
+			t.Fatalf("scanned %v, want %v", got, want)
+		}
+		if !states["docs/sub"].IsDir {
+			t.Fatal("docs/sub not marked as a directory")
+		}
+		if states["root.md"].IsDir {
+			t.Fatal("root.md marked as a directory")
+		}
+		if got := states["docs/sub/deep.md"].Size; got != 2 {
+			t.Fatalf("deep.md size = %d, want 2", got)
+		}
+	})
+
+	// A path the tree never shows must not produce a change event either, so the two skip rules have to stay identical
+	t.Run("visible paths match GetTree", func(t *testing.T) {
+		s := newTestStorage(t)
+		writeFile(t, s, "root.md", "r")
+		writeFile(t, s, "docs/guide.md", "g")
+		writeFile(t, s, ".hidden", "h")
+		writeFile(t, s, ".secret/inner.md", "i")
+
+		states, err := s.Scan()
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		root, err := s.GetTree()
+		if err != nil {
+			t.Fatalf("GetTree: %v", err)
+		}
+
+		var treePaths func(n *FileNode) []string
+		treePaths = func(n *FileNode) []string {
+			var paths []string
+			for _, c := range n.Children {
+				paths = append(paths, filepath.ToSlash(c.Path))
+				paths = append(paths, treePaths(c)...)
+			}
+			return paths
+		}
+		want := slices.Sorted(slices.Values(treePaths(root)))
+		if got := slices.Sorted(maps.Keys(states)); !slices.Equal(got, want) {
+			t.Fatalf("scan sees %v, tree sees %v", got, want)
 		}
 	})
 }

@@ -95,6 +95,39 @@ func (s *FileStorage) GetTree() (*FileNode, error) {
 	return root, nil
 }
 
+// The dotfile skip mirrors GetTree's deliberately: a path the tree never shows must not generate a change event either, and it keeps .trash and the .kairo-save-* temps out of the diff
+func (s *FileStorage) Scan() (map[string]FileState, error) {
+	states := make(map[string]FileState)
+	err := filepath.WalkDir(s.dataDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, err := filepath.Rel(s.dataDir, path)
+		if err != nil {
+			return err
+		}
+		if relPath == "." {
+			return nil
+		}
+		if strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		states[filepath.ToSlash(relPath)] = FileState{Size: info.Size(), ModTime: info.ModTime(), IsDir: d.IsDir()}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return states, nil
+}
+
 func (s *FileStorage) ReadFile(path string) ([]byte, error) {
 	fullPath, err := s.safePath(path)
 	if err != nil {

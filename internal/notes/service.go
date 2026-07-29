@@ -25,6 +25,10 @@ func (s *Service) GetTree() (*FileNode, error) {
 	return s.storage.GetTree()
 }
 
+func (s *Service) Scan() (map[string]FileState, error) {
+	return s.storage.Scan()
+}
+
 func (s *Service) GetFile(path string) ([]byte, error) {
 	return s.storage.ReadFile(path)
 }
