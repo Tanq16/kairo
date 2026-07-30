@@ -38,12 +38,6 @@ func (t *tokenTable) set(path, token string) {
 	t.last[path] = token
 }
 
-func (t *tokenTable) drop(path string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	delete(t.last, path)
-}
-
 // dropTree removes a path and its descendants so a deleted/moved directory can't leave stale child tokens that later suppress a legitimate save; the "/" boundary stops a sibling like "notesX" being caught by prefix "notes"
 func (t *tokenTable) dropTree(prefix string) {
 	t.mu.Lock()

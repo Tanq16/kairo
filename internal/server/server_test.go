@@ -246,9 +246,9 @@ func TestTokenTableChanged(t *testing.T) {
 	if !tt.changed("q", tokB) {
 		t.Fatal("first token for an independent path must report changed")
 	}
-	tt.drop("p")
+	tt.dropTree("p")
 	if !tt.changed("p", tokB) {
-		t.Fatal("changed() after drop() must report changed again")
+		t.Fatal("changed() after dropTree() must report changed again")
 	}
 	tt.set("r", tokA)
 	if tt.changed("r", tokA) {
@@ -273,7 +273,7 @@ func TestTokenTableConcurrent(t *testing.T) {
 				case 1:
 					tt.set(p, contentToken([]byte{byte(i)}))
 				default:
-					tt.drop(p)
+					tt.dropTree(p)
 				}
 			}
 		})
