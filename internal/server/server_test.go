@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -766,5 +767,77 @@ func TestHandleRescanNeverBlocks(t *testing.T) {
 	case <-s.rescan:
 	default:
 		t.Fatal("no scan queued")
+	}
+}
+
+// A tab that holds an old app.js against a new server breaks in ways that look like server bugs, so the upgrade path depends on every asset being revalidatable
+func TestStaticAssetsRevalidate(t *testing.T) {
+	s := newTestServer(t)
+	targets := []string{routePrefix + "/static/js/app.js", "/", noteURL("dir/a note.md")}
+	for _, target := range targets {
+		t.Run(target, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			rec := httptest.NewRecorder()
+			s.mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("GET %s status = %d, want %d", target, rec.Code, http.StatusOK)
+			}
+			etag := rec.Header().Get("ETag")
+			if etag == "" {
+				t.Fatalf("GET %s carries no ETag", target)
+			}
+			if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+				t.Fatalf("GET %s Cache-Control = %q, want no-cache", target, cc)
+			}
+			served := rec.Body.Len()
+
+			req = httptest.NewRequest(http.MethodGet, target, nil)
+			req.Header.Set("If-None-Match", etag)
+			rec = httptest.NewRecorder()
+			s.mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusNotModified {
+				t.Fatalf("GET %s with a matching If-None-Match = %d, want %d", target, rec.Code, http.StatusNotModified)
+			}
+			if rec.Body.Len() != 0 {
+				t.Fatalf("304 for %s sent %d bytes", target, rec.Body.Len())
+			}
+
+			// the whole point of the ETag is the mismatch case: a client on the previous build has to be given the new bytes
+			req = httptest.NewRequest(http.MethodGet, target, nil)
+			req.Header.Set("If-None-Match", `"3f7a"`)
+			rec = httptest.NewRecorder()
+			s.mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK || rec.Body.Len() != served {
+				t.Fatalf("GET %s with a stale If-None-Match = %d with %d bytes, want %d with %d", target, rec.Code, rec.Body.Len(), http.StatusOK, served)
+			}
+		})
+	}
+}
+
+// The ETag is looked up by a key derived from the request path; a shape mismatch would still serve every asset as a 200 with no validator, which is exactly the silent staleness this replaced
+func TestEveryEmbeddedAssetCarriesAnETag(t *testing.T) {
+	s := newTestServer(t)
+	err := fs.WalkDir(staticFiles, "static", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		// the file server redirects a request for index.html to its own directory, so the shell is only ever reached through the catch-all
+		target := routePrefix + "/static/" + strings.TrimPrefix(name, "static/")
+		if name == "static/index.html" {
+			target = "/"
+		}
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		rec := httptest.NewRecorder()
+		s.mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want %d", name, rec.Code, http.StatusOK)
+		}
+		if rec.Header().Get("ETag") == "" {
+			t.Fatalf("GET %s carries no ETag", name)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk embedded assets: %v", err)
 	}
 }

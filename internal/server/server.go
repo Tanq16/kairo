@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -26,13 +27,14 @@ type Config struct {
 }
 
 type Server struct {
-	config  Config
-	mux     *http.ServeMux
-	service *notes.Service
-	hub     *hub
-	tokens  *tokenTable
-	saveMu  sync.Mutex
-	rescan  chan struct{}
+	config     Config
+	mux        *http.ServeMux
+	service    *notes.Service
+	hub        *hub
+	tokens     *tokenTable
+	saveMu     sync.Mutex
+	rescan     chan struct{}
+	assetETags map[string]string
 }
 
 func New(cfg Config) *Server {
@@ -61,7 +63,11 @@ func (s *Server) Setup() error {
 	if err != nil {
 		return fmt.Errorf("failed to create static filesystem: %w", err)
 	}
-	s.mux.Handle(routePrefix+"/static/", http.StripPrefix(routePrefix+"/static/", http.FileServer(http.FS(staticFS))))
+	s.assetETags, err = buildAssetETags(staticFS)
+	if err != nil {
+		return fmt.Errorf("failed to hash static assets: %w", err)
+	}
+	s.mux.Handle(routePrefix+"/static/", http.StripPrefix(routePrefix+"/static/", s.staticHandler(staticFS)))
 
 	// API routes live on a sub-mux so the SPA catch-all can't shadow method enforcement (405) or unknown-endpoint 404s under the API subtree
 	apiMux := http.NewServeMux()
@@ -144,6 +150,6 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(data)
+	s.setAssetValidators(w, "index.html")
+	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(data))
 }
