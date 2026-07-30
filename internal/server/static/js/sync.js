@@ -1,11 +1,17 @@
 // Real-time viewer sync over SSE; KAIRO_CLIENT and currentFileToken are declared in app.js (no imports in this file)
 
 let kairoEvents = null;
+let streamEverOpened = false;
 
 function kairoConnect() {
     kairoEvents = new EventSource(`${KAIRO_ROUTES}/api/events?client=${encodeURIComponent(KAIRO_CLIENT)}`);
     kairoEvents.onmessage = onSyncEvent;
-    kairoEvents.onopen = () => setSyncConnected(true);
+    kairoEvents.onopen = () => {
+        setSyncConnected(true);
+        // the server keeps scanning until it notices the stream died, so whatever it wrote into the dead socket is gone and no later event repeats it
+        if (streamEverOpened) kairoResync();
+        streamEverOpened = true;
+    };
     kairoEvents.onerror = () => setSyncConnected(false);
 }
 
@@ -26,6 +32,10 @@ function onSyncEvent(e) {
 
     if (ev.op !== 'save') scheduleTreeRefresh();
 
+    if (ev.op === 'rescan') {
+        revalidateOpenPath();
+        return;
+    }
     if (ev.op === 'move') {
         if (currentPath && (currentPath === ev.path || currentPath.startsWith(ev.path + '/'))) {
             const rebased = ev.newPath + currentPath.slice(ev.path.length);
@@ -37,12 +47,7 @@ function onSyncEvent(e) {
         return;
     }
     if (ev.op === 'delete') {
-        // a queued autosave for this path would resurrect the deleted file, so drop it
-        discardPendingSave(ev.path);
-        if (currentPath && (currentPath === ev.path || currentPath.startsWith(ev.path + '/'))) {
-            showToast('This note was deleted on another device', 'warning');
-            goHome('replace');
-        }
+        handleRemoteDelete(ev.path);
         return;
     }
     if ((ev.op === 'save' || ev.op === 'create') && ev.path === currentPath && ev.token && ev.token !== currentFileToken) {
@@ -50,10 +55,38 @@ function onSyncEvent(e) {
     }
 }
 
+function handleRemoteDelete(path) {
+    // a queued autosave for this path would resurrect the deleted file, so drop it
+    discardPendingSave(path);
+    if (currentPath && (currentPath === path || currentPath.startsWith(path + '/'))) {
+        showToast('This note was deleted elsewhere', 'warning');
+        goHome('replace');
+    }
+}
+
+// Existence first: applyRemote reads a deleted file as a failed fetch and returns quietly, leaving a live buffer for autosave to write back
+async function revalidateOpenPath() {
+    const path = currentPath;
+    if (!path) return;
+    let res;
+    try {
+        res = await fetch(fileApiUrl(path), { method: 'HEAD' });
+    } catch (e) {
+        return;
+    }
+    if (path !== currentPath) return;
+    if (res.status === 404) {
+        handleRemoteDelete(path);
+        return;
+    }
+    // the change may have been to another file in the batch, so a dirty buffer is left alone
+    if (!unsaved && !hasPendingSave(path)) applyRemote(path);
+}
+
 async function applyRemote(path) {
     if (editorPath !== path) return; // only patch an open editable note; images/folders leave editorPath null, so their stale CM doc is never clobbered
     if (unsaved || hasPendingSave(path)) {
-        showToast('This note changed on another device', 'info');
+        showToast('This note changed elsewhere', 'info');
         return;
     }
     try {
@@ -108,9 +141,7 @@ function kairoResync() {
         kairoConnect();
     }
     scheduleTreeRefresh();
-    if (currentPath && !unsaved && !hasPendingSave(currentPath)) {
-        applyRemote(currentPath);
-    }
+    revalidateOpenPath();
 }
 
 function setSyncConnected(ok) {

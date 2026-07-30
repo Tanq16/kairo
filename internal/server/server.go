@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -26,12 +27,14 @@ type Config struct {
 }
 
 type Server struct {
-	config  Config
-	mux     *http.ServeMux
-	service *notes.Service
-	hub     *hub
-	tokens  *tokenTable
-	saveMu  sync.Mutex
+	config     Config
+	mux        *http.ServeMux
+	service    *notes.Service
+	hub        *hub
+	tokens     *tokenTable
+	saveMu     sync.Mutex
+	rescan     chan struct{}
+	assetETags map[string]string
 }
 
 func New(cfg Config) *Server {
@@ -40,6 +43,7 @@ func New(cfg Config) *Server {
 		mux:    http.NewServeMux(),
 		hub:    newHub(),
 		tokens: newTokenTable(),
+		rescan: make(chan struct{}, 1),
 	}
 }
 
@@ -53,12 +57,18 @@ func (s *Server) Setup() error {
 	}
 	s.service = notes.NewService(storage)
 	s.hub.wg.Go(s.hub.run)
+	s.hub.wg.Go(s.watch)
 
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		return fmt.Errorf("failed to create static filesystem: %w", err)
 	}
-	s.mux.Handle(routePrefix+"/static/", http.StripPrefix(routePrefix+"/static/", http.FileServer(http.FS(staticFS))))
+	s.assetETags, err = buildAssetETags(staticFS)
+	if err != nil {
+		return fmt.Errorf("failed to hash static assets: %w", err)
+	}
+	assets := s.withAssetValidators(http.FileServer(http.FS(staticFS)))
+	s.mux.Handle(routePrefix+"/static/", http.StripPrefix(routePrefix+"/static/", assets))
 
 	// API routes live on a sub-mux so the SPA catch-all can't shadow method enforcement (405) or unknown-endpoint 404s under the API subtree
 	apiMux := http.NewServeMux()
@@ -71,6 +81,7 @@ func (s *Server) Setup() error {
 	apiMux.HandleFunc("POST /api/delete", requireWire(s.handleDelete))
 	apiMux.HandleFunc("POST /api/move", requireWire(s.handleMove))
 	apiMux.HandleFunc("POST /api/upload", requireWire(s.handleUpload))
+	apiMux.HandleFunc("POST /api/rescan", s.handleRescan)
 	apiMux.HandleFunc("GET /api/events", s.handleEvents)
 	apiMux.HandleFunc("GET /api/health", s.handleHealth)
 	s.mux.Handle(routePrefix+"/api/", http.StripPrefix(routePrefix, apiMux))
@@ -140,6 +151,6 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(data)
+	s.setAssetValidators(w, "index.html")
+	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(data))
 }

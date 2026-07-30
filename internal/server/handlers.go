@@ -231,6 +231,15 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
+// Outside requireWire deliberately: the caller is a script with no client wire version to send
+func (s *Server) handleRescan(w http.ResponseWriter, r *http.Request) {
+	select {
+	case s.rescan <- struct{}{}:
+	default:
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok"}`))
