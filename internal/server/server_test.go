@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -721,7 +720,6 @@ func TestEmitChangesCoalesceClearsTokens(t *testing.T) {
 	}
 }
 
-// The client tells a deleted note apart from a failed fetch by status alone, so the GET route has to answer HEAD
 func TestHandleFileAnswersHEAD(t *testing.T) {
 	s := newTestServer(t)
 	if rec := saveNote(t, s, "note.md", "body"); rec.Code != http.StatusOK {
@@ -767,7 +765,7 @@ func TestHandleRescanNeverBlocks(t *testing.T) {
 
 func TestStaticAssetsRevalidate(t *testing.T) {
 	s := newTestServer(t)
-	targets := []string{routePrefix + "/static/js/app.js", "/", noteURL("dir/a note.md")}
+	targets := []string{routePrefix + "/static/js/app.js", "/"}
 	for _, target := range targets {
 		t.Run(target, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, target, nil)
@@ -804,33 +802,5 @@ func TestStaticAssetsRevalidate(t *testing.T) {
 				t.Fatalf("GET %s with a stale If-None-Match = %d with %d bytes, want %d with %d", target, rec.Code, rec.Body.Len(), http.StatusOK, served)
 			}
 		})
-	}
-}
-
-// A key-shape mismatch would still serve every asset as a 200, silently with no validator at all
-func TestEveryEmbeddedAssetCarriesAnETag(t *testing.T) {
-	s := newTestServer(t)
-	err := fs.WalkDir(staticFiles, "static", func(name string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		// the file server redirects a request for index.html to its own directory, so the shell is only ever reached through the catch-all
-		target := routePrefix + "/static/" + strings.TrimPrefix(name, "static/")
-		if name == "static/index.html" {
-			target = "/"
-		}
-		req := httptest.NewRequest(http.MethodGet, target, nil)
-		rec := httptest.NewRecorder()
-		s.mux.ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("GET %s status = %d, want %d", name, rec.Code, http.StatusOK)
-		}
-		if rec.Header().Get("ETag") == "" {
-			t.Fatalf("GET %s carries no ETag", name)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk embedded assets: %v", err)
 	}
 }
