@@ -45,7 +45,6 @@ func (s *Server) watch() {
 
 		cur, err := s.service.Scan()
 		if err != nil {
-			// A half-finished walk would read as a pile of deletes
 			log.Printf("ERROR Failed to scan data directory: %v", err)
 			continue
 		}
@@ -106,7 +105,6 @@ func (s *Server) emitChanges(changes []scanChange) {
 // saveMu is held across read+token+emit so an interleaved handleSave can't record this token first and leave its own event unsent
 func (s *Server) emitContentChange(op, path string, size int64) {
 	if size > maxHashBytes {
-		// No token, so no client tries to patch it into an editor
 		s.hub.emit(Event{Op: op, Path: path})
 		return
 	}
@@ -114,7 +112,7 @@ func (s *Server) emitContentChange(op, path string, size int64) {
 	defer s.saveMu.Unlock()
 	content, err := s.service.GetFile(path)
 	if err != nil {
-		return // vanished since the walk; the next scan reports it as a delete
+		return
 	}
 	token := contentToken(content)
 	if !s.tokens.changed(path, token) {

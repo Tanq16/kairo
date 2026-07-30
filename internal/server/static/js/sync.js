@@ -8,7 +8,7 @@ function kairoConnect() {
     kairoEvents.onmessage = onSyncEvent;
     kairoEvents.onopen = () => {
         setSyncConnected(true);
-        // the server only learns a stream died at its next write, and keeps scanning until then — those events went into a dead socket and no later event will mention them again
+        // the server keeps scanning until it notices the stream died, so whatever it wrote into the dead socket is gone and no later event repeats it
         if (streamEverOpened) kairoResync();
         streamEverOpened = true;
     };

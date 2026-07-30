@@ -506,7 +506,6 @@ func TestScan(t *testing.T) {
 		}
 	})
 
-	// A path the tree never shows must not produce a change event either, so the two skip rules have to stay identical
 	t.Run("visible paths match GetTree", func(t *testing.T) {
 		s := newTestStorage(t)
 		writeFile(t, s, "root.md", "r")

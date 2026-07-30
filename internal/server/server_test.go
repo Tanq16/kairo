@@ -572,14 +572,14 @@ func TestDiffScan(t *testing.T) {
 			cur:  map[string]notes.FileState{"a.md": file(3, late)},
 			want: []scanChange{{op: "save", path: "a.md", size: 3}},
 		},
-		// Whole-second mtime granularity (HFS+, some NFS) can hide a rewrite inside one second, so size has to be compared too
+		// Whole-second mtime granularity (HFS+, some NFS) hides a rewrite inside one second
 		{
 			name: "different size at the same mtime reports a save",
 			prev: map[string]notes.FileState{"a.md": file(3, early)},
 			cur:  map[string]notes.FileState{"a.md": file(9, early)},
 			want: []scanChange{{op: "save", path: "a.md", size: 9}},
 		},
-		// A directory's mtime moves whenever an entry is added or removed; the entries themselves already report that
+		// Directory mtimes move on every add and remove; the entries themselves already report those
 		{
 			name: "touched directory reports nothing",
 			prev: map[string]notes.FileState{"d": dir(early)},
@@ -621,7 +621,6 @@ func mustNotRecv(t *testing.T, ch <-chan Event) {
 	}
 }
 
-// The token table is what lets the scanner run alongside the write handlers: bytes clients already know about must not come back at them as a remote change
 func TestEmitContentChangeSuppressesKnownContent(t *testing.T) {
 	const viaAPI = "written through the API"
 	const viaDisk = "written behind the API"
@@ -654,7 +653,6 @@ func TestEmitContentChangeSuppressesKnownContent(t *testing.T) {
 	}
 }
 
-// An external writer is not held to the upload cap, so an oversized file must be announced without being read into memory to hash
 func TestEmitContentChangeSkipsOversizedFile(t *testing.T) {
 	s := newTestServer(t)
 	c := registerClient(t, s.hub, 4)
@@ -672,7 +670,6 @@ func TestEmitContentChangeSkipsOversizedFile(t *testing.T) {
 	}
 }
 
-// A bulk change must not outrun a client's send buffer: the hub drops whoever overflows, so the whole fleet would flap on a git checkout
 func TestEmitChangesCoalescesBulkChange(t *testing.T) {
 	s := newTestServer(t)
 	c := registerClient(t, s.hub, 2)
@@ -693,7 +690,6 @@ func TestEmitChangesCoalescesBulkChange(t *testing.T) {
 	}
 }
 
-// A coalesced batch tells clients nothing about content, so the tokens it skipped must not survive to suppress a later change that restores the pre-batch bytes
 func TestEmitChangesCoalesceClearsTokens(t *testing.T) {
 	const original = "original"
 
@@ -714,7 +710,7 @@ func TestEmitChangesCoalesceClearsTokens(t *testing.T) {
 		t.Fatalf("event = %+v, want a single rescan", ev)
 	}
 
-	// note.md now holds the pre-batch bytes again; while the batch's stale token stands this hashes equal to it and is swallowed
+	// note.md holds the pre-batch bytes again, so a surviving stale token hashes equal to it and swallows the event
 	s.emitContentChange("save", "note.md", int64(len(original)))
 	ev := mustRecv(t, c.send)
 	if ev.Op != "save" || ev.Path != "note.md" {
@@ -752,7 +748,6 @@ func TestHandleFileAnswersHEAD(t *testing.T) {
 	}
 }
 
-// Nothing drains the kick channel until the scanner comes round, so a caller must never be left holding the request open
 func TestHandleRescanNeverBlocks(t *testing.T) {
 	s := New(Config{DataDir: t.TempDir()})
 	for range 3 {
@@ -770,7 +765,6 @@ func TestHandleRescanNeverBlocks(t *testing.T) {
 	}
 }
 
-// A tab that holds an old app.js against a new server breaks in ways that look like server bugs, so the upgrade path depends on every asset being revalidatable
 func TestStaticAssetsRevalidate(t *testing.T) {
 	s := newTestServer(t)
 	targets := []string{routePrefix + "/static/js/app.js", "/", noteURL("dir/a note.md")}
@@ -802,7 +796,6 @@ func TestStaticAssetsRevalidate(t *testing.T) {
 				t.Fatalf("304 for %s sent %d bytes", target, rec.Body.Len())
 			}
 
-			// the whole point of the ETag is the mismatch case: a client on the previous build has to be given the new bytes
 			req = httptest.NewRequest(http.MethodGet, target, nil)
 			req.Header.Set("If-None-Match", `"3f7a"`)
 			rec = httptest.NewRecorder()
@@ -814,7 +807,7 @@ func TestStaticAssetsRevalidate(t *testing.T) {
 	}
 }
 
-// The ETag is looked up by a key derived from the request path; a shape mismatch would still serve every asset as a 200 with no validator, which is exactly the silent staleness this replaced
+// A key-shape mismatch would still serve every asset as a 200, silently with no validator at all
 func TestEveryEmbeddedAssetCarriesAnETag(t *testing.T) {
 	s := newTestServer(t)
 	err := fs.WalkDir(staticFiles, "static", func(name string, d fs.DirEntry, err error) error {

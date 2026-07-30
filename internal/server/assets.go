@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// embed.FS reports a zero ModTime, so http.FileServer sends no validator at all and a browser can hold a stale app.js across an upgrade with nothing to revalidate against; embedded bytes are fixed at build time, so hashing once at startup stays correct
+// embed.FS reports a zero ModTime, so http.FileServer sends no validator of its own and a browser can hold a stale app.js indefinitely; embedded bytes never change at runtime, so one hash per file at startup is enough
 func buildAssetETags(fsys fs.FS) (map[string]string, error) {
 	etags := make(map[string]string)
 	err := fs.WalkDir(fsys, ".", func(name string, d fs.DirEntry, err error) error {
@@ -27,7 +27,7 @@ func buildAssetETags(fsys fs.FS) (map[string]string, error) {
 	return etags, nil
 }
 
-// http.ServeContent answers If-None-Match from whatever ETag the header already carries, so setting it before delegating is what turns a repeat load into a 304
+// http.ServeContent answers If-None-Match from whatever ETag the header already carries, so setting it before delegating is what produces the 304
 func (s *Server) staticHandler(fsys fs.FS) http.Handler {
 	files := http.FileServer(http.FS(fsys))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +36,6 @@ func (s *Server) staticHandler(fsys fs.FS) http.Handler {
 	})
 }
 
-// no-cache still allows caching — it only forbids reusing the copy without asking, which is what keeps a 3.5MB vendored bundle from being re-sent on every load
 func (s *Server) setAssetValidators(w http.ResponseWriter, name string) {
 	etag, ok := s.assetETags[name]
 	if !ok {
