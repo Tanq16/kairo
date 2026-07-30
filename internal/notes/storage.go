@@ -41,25 +41,33 @@ func (s *FileStorage) safePath(reqPath string) (string, error) {
 	return filepath.Join(s.dataDir, clean), nil
 }
 
-func (s *FileStorage) GetTree() (*FileNode, error) {
-	root := &FileNode{Name: "root", Path: "", IsDir: true, Children: []*FileNode{}}
-
-	err := filepath.WalkDir(s.dataDir, func(path string, d fs.DirEntry, err error) error {
+// A path the tree never shows must not raise a change event either, so both traversals share one visibility rule
+func (s *FileStorage) walkVisible(fn func(relPath string, d fs.DirEntry) error) error {
+	return filepath.WalkDir(s.dataDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		relPath, _ := filepath.Rel(s.dataDir, path)
+		relPath, err := filepath.Rel(s.dataDir, path)
+		if err != nil {
+			return err
+		}
 		if relPath == "." {
 			return nil
 		}
-
 		if strings.HasPrefix(d.Name(), ".") {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
 		}
+		return fn(relPath, d)
+	})
+}
 
+func (s *FileStorage) GetTree() (*FileNode, error) {
+	root := &FileNode{Name: "root", Path: "", IsDir: true, Children: []*FileNode{}}
+
+	err := s.walkVisible(func(relPath string, d fs.DirEntry) error {
 		parts := strings.Split(relPath, string(os.PathSeparator))
 		current := root
 
@@ -95,26 +103,9 @@ func (s *FileStorage) GetTree() (*FileNode, error) {
 	return root, nil
 }
 
-// Skip rule must match GetTree's: a path the tree never shows must not raise a change event either
 func (s *FileStorage) Scan() (map[string]FileState, error) {
 	states := make(map[string]FileState)
-	err := filepath.WalkDir(s.dataDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath, err := filepath.Rel(s.dataDir, path)
-		if err != nil {
-			return err
-		}
-		if relPath == "." {
-			return nil
-		}
-		if strings.HasPrefix(d.Name(), ".") {
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
+	err := s.walkVisible(func(relPath string, d fs.DirEntry) error {
 		info, err := d.Info()
 		if err != nil {
 			return err
