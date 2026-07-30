@@ -28,11 +28,10 @@ func buildAssetETags(fsys fs.FS) (map[string]string, error) {
 }
 
 // http.ServeContent answers If-None-Match from whatever ETag the header already carries, so setting it before delegating is what produces the 304
-func (s *Server) staticHandler(fsys fs.FS) http.Handler {
-	files := http.FileServer(http.FS(fsys))
+func (s *Server) withAssetValidators(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.setAssetValidators(w, strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/"))
-		files.ServeHTTP(w, r)
+		next.ServeHTTP(w, r)
 	})
 }
 

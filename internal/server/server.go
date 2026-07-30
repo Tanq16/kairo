@@ -67,7 +67,8 @@ func (s *Server) Setup() error {
 	if err != nil {
 		return fmt.Errorf("failed to hash static assets: %w", err)
 	}
-	s.mux.Handle(routePrefix+"/static/", http.StripPrefix(routePrefix+"/static/", s.staticHandler(staticFS)))
+	assets := s.withAssetValidators(http.FileServer(http.FS(staticFS)))
+	s.mux.Handle(routePrefix+"/static/", http.StripPrefix(routePrefix+"/static/", assets))
 
 	// API routes live on a sub-mux so the SPA catch-all can't shadow method enforcement (405) or unknown-endpoint 404s under the API subtree
 	apiMux := http.NewServeMux()
