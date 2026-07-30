@@ -1,11 +1,17 @@
 // Real-time viewer sync over SSE; KAIRO_CLIENT and currentFileToken are declared in app.js (no imports in this file)
 
 let kairoEvents = null;
+let streamEverOpened = false;
 
 function kairoConnect() {
     kairoEvents = new EventSource(`${KAIRO_ROUTES}/api/events?client=${encodeURIComponent(KAIRO_CLIENT)}`);
     kairoEvents.onmessage = onSyncEvent;
-    kairoEvents.onopen = () => setSyncConnected(true);
+    kairoEvents.onopen = () => {
+        setSyncConnected(true);
+        // the server only learns a stream died at its next write, and keeps scanning until then — those events went into a dead socket and no later event will mention them again
+        if (streamEverOpened) kairoResync();
+        streamEverOpened = true;
+    };
     kairoEvents.onerror = () => setSyncConnected(false);
 }
 
