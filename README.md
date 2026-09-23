@@ -89,7 +89,7 @@ services:
 Download from [releases](https://github.com/tanq16/kairo/releases) and run:
 
 ```bash
-./kairo serve --port 8080
+./kairo --port 8080
 ```
 
 ### Build from Source
@@ -100,7 +100,7 @@ Requires Go 1.27+.
 git clone https://github.com/tanq16/kairo
 cd kairo
 make build
-./kairo serve
+./kairo
 ```
 
 ## Usage
@@ -108,7 +108,7 @@ make build
 ### Command Options
 
 ```bash
-./kairo serve [flags]
+./kairo [flags]
 ```
 
 - `--port, -p`: Port to listen on (default: 8080)

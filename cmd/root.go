@@ -9,17 +9,39 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+	"github.com/tanq16/kairo/internal/server"
 )
 
 var AppVersion = "dev-build"
 
 var debugFlag bool
 
+var rootFlags struct {
+	port    int
+	host    string
+	dataDir string
+}
+
 var rootCmd = &cobra.Command{
 	Use:               "kairo",
 	Short:             "A simple note-taking application with Markdown support",
 	Version:           AppVersion,
+	Args:              cobra.NoArgs,
 	CompletionOptions: cobra.CompletionOptions{HiddenDefaultCmd: true},
+	Run: func(cmd *cobra.Command, args []string) {
+		cfg := server.Config{
+			Port:    rootFlags.port,
+			Host:    rootFlags.host,
+			DataDir: rootFlags.dataDir,
+		}
+		srv := server.New(cfg)
+		if err := srv.Setup(); err != nil {
+			log.Fatal().Err(err).Msg("Failed to setup server")
+		}
+		if err := srv.Run(); err != nil {
+			log.Fatal().Err(err).Msg("Server error")
+		}
+	},
 }
 
 func Execute() {
@@ -45,5 +67,8 @@ func init() {
 	rootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "Enable debug logging")
 	cobra.OnInitialize(setupLogs)
-	rootCmd.AddCommand(serveCmd)
+
+	rootCmd.Flags().IntVarP(&rootFlags.port, "port", "p", 8080, "Port to listen on")
+	rootCmd.Flags().StringVarP(&rootFlags.host, "host", "H", "0.0.0.0", "Host to bind to")
+	rootCmd.Flags().StringVarP(&rootFlags.dataDir, "data", "d", "./data", "Path to the data directory")
 }

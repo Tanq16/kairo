@@ -31,4 +31,4 @@ VOLUME ["/data"]
 USER 10001:10001
 EXPOSE 8080
 ENTRYPOINT ["./kairo"]
-CMD ["serve", "-d", "/data", "-H", "0.0.0.0"]
+CMD ["-d", "/data", "-H", "0.0.0.0"]
