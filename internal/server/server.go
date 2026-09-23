@@ -6,7 +6,6 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/tanq16/kairo/internal/notes"
 )
 
@@ -127,8 +127,7 @@ func (s *Server) Run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("INFO Starting on http://%s", addr)
-		log.Printf("INFO Data directory: %s", s.config.DataDir)
+		log.Info().Str("addr", addr).Str("data_dir", s.config.DataDir).Msg("Starting server")
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -138,7 +137,7 @@ func (s *Server) Run() error {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		log.Printf("INFO Shutting down")
+		log.Info().Msg("Shutting down")
 		// close SSE streams first — a live stream never idles and would otherwise pin srv.Shutdown to its full timeout
 		s.hub.shutdown()
 		return srv.Shutdown(shutdownCtx)

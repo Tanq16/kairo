@@ -14,10 +14,10 @@ import (
 )
 
 type Service struct {
-	storage Store
+	storage *FileStorage
 }
 
-func NewService(storage Store) *Service {
+func NewService(storage *FileStorage) *Service {
 	return &Service{storage: storage}
 }
 
@@ -303,7 +303,6 @@ func (s *Service) Search(query string) ([]SearchResult, error) {
 		}
 	}
 
-	// content matches stay substring, not fuzzy — fuzzy full-text is noisy
 	q := strings.ToLower(query)
 	for _, f := range files {
 		if matched[f.Path] {
