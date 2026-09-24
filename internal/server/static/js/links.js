@@ -2,6 +2,7 @@
 
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
 const NOTE_EXTS = ['.md', '.markdown', '.txt'];
+const PDF_EXTS = ['.pdf'];
 
 function hasExt(path, exts) {
     const lower = path.toLowerCase();
@@ -44,7 +45,7 @@ function fileApiUrl(path) {
 function opensInApp(path, isDir) {
     if (isDir) return true;
     const name = basename(path);
-    return !name.includes('.') || hasExt(name, NOTE_EXTS) || hasExt(name, IMAGE_EXTS);
+    return !name.includes('.') || hasExt(name, NOTE_EXTS) || hasExt(name, IMAGE_EXTS) || hasExt(name, PDF_EXTS);
 }
 
 function fixImagePaths() {

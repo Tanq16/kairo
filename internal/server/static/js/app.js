@@ -55,7 +55,9 @@ const els = {
         plainScaled: document.getElementById('print-plain-scaled'),
         scaleInput: document.getElementById('print-scale-input'),
         cancel: document.getElementById('print-cancel')
-    }
+    },
+    pdfContainer: document.getElementById('pdf-container'),
+    pdfFrame: document.getElementById('pdf-frame')
 };
 
 let currentPath = null;
@@ -484,6 +486,25 @@ function showPreviewPane() {
     hideToc();
 }
 
+function showPdfPane(path, hash = '') {
+    els.editorContainer.classList.add('hidden');
+    els.previewContainer.classList.add('hidden');
+    els.pdfContainer.classList.remove('hidden');
+    els.pdfFrame.src = fileApiUrl(path) + (hash ? '#' + hash : '');
+    els.previewBtn.classList.add('hidden');
+    if (els.printBtn) els.printBtn.classList.add('hidden');
+    if (els.widthToggle) els.widthToggle.classList.add('hidden');
+    hideToc();
+}
+
+function hidePdfPane() {
+    if (els.pdfContainer && !els.pdfContainer.classList.contains('hidden')) {
+        els.pdfContainer.classList.add('hidden');
+        els.pdfFrame.src = 'about:blank';
+        if (els.widthToggle) els.widthToggle.classList.remove('hidden');
+    }
+}
+
 function renderNotice(message) {
     els.markdownBody.innerHTML = '';
     const p = document.createElement('p');
@@ -513,7 +534,9 @@ async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
 
     els.moveBtn.classList.toggle('hidden', !path);
     els.deleteBtn.classList.toggle('hidden', !path);
-    if (els.printBtn) els.printBtn.classList.toggle('hidden', !path || isDir);
+    if (els.printBtn) els.printBtn.classList.toggle('hidden', !path || isDir || hasExt(path, PDF_EXTS));
+
+    hidePdfPane();
 
     if (isDir) {
         showPreviewPane();
@@ -527,6 +550,11 @@ async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
         els.previewContainer.classList.add('hidden');
         els.previewBtn.classList.add('hidden');
         hideToc();
+        return;
+    }
+
+    if (hasExt(path, PDF_EXTS)) {
+        showPdfPane(path, hash);
         return;
     }
 
