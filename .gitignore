@@ -20,11 +20,11 @@ AI-docs/
 
 # Downloaded assets (make assets) - not app.js which is source
 internal/server/static/js/*.min.js
-!internal/server/static/js/codemirror-bundle.min.js
 internal/server/static/js/tailwindcss.js
 internal/server/static/css/
 internal/server/static/fonts/
 internal/server/static/icons/favicon.svg
+internal/server/static/.assets-stamp
 
 # IDE
 .idea/

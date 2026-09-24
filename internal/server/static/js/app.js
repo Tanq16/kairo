@@ -190,34 +190,182 @@ function initSidebarResize() {
     });
 }
 
+let breadcrumbsExpanded = false;
+let activeBreadcrumbDropdown = null;
+
+function closeBreadcrumbDropdown() {
+    if (activeBreadcrumbDropdown) {
+        activeBreadcrumbDropdown.remove();
+        activeBreadcrumbDropdown = null;
+    }
+}
+
+document.addEventListener('click', (e) => {
+    if (activeBreadcrumbDropdown && !activeBreadcrumbDropdown.contains(e.target) && !e.target.closest('#breadcrumb-ellipsis-btn')) {
+        closeBreadcrumbDropdown();
+    }
+});
+window.addEventListener('resize', closeBreadcrumbDropdown);
+window.addEventListener('scroll', closeBreadcrumbDropdown, true);
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeBreadcrumbDropdown();
+});
+
 function updateBreadcrumbs(path) {
     const container = els.filenameDisplay;
     container.innerHTML = '';
+    closeBreadcrumbDropdown();
     if (!path) {
         container.innerHTML = '<span class="text-subtext0">Select a note...</span>';
         return;
     }
     const parts = path.split('/');
+    const shouldSkip = !breadcrumbsExpanded && (parts.length > 3 || (parts.length === 3 && path.length > 40));
+
+    if (shouldSkip) {
+        const rootCrumb = document.createElement('span');
+        rootCrumb.className = 'text-subtext0 hover:text-mauve cursor-pointer truncate max-w-[120px] md:max-w-[180px] shrink-0';
+        rootCrumb.textContent = parts[0];
+        rootCrumb.title = parts[0];
+        rootCrumb.onclick = () => loadFile(parts[0], true);
+        container.appendChild(rootCrumb);
+
+        const sep1 = document.createElement('span');
+        sep1.className = 'text-overlay1 mx-1 shrink-0';
+        sep1.textContent = '/';
+        container.appendChild(sep1);
+
+        const middleParts = parts.slice(1, -1);
+        const ellipsisBtn = document.createElement('button');
+        ellipsisBtn.id = 'breadcrumb-ellipsis-btn';
+        ellipsisBtn.type = 'button';
+        ellipsisBtn.className = 'text-subtext0 hover:text-mauve hover:bg-surface0 px-1.5 py-0.5 rounded text-xs font-semibold tracking-wider transition-colors shrink-0';
+        ellipsisBtn.textContent = '…';
+        ellipsisBtn.title = `Hidden folders: ${middleParts.join(' / ')}\nClick to view options`;
+        ellipsisBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (activeBreadcrumbDropdown) {
+                closeBreadcrumbDropdown();
+                return;
+            }
+            const dropdown = document.createElement('div');
+            dropdown.id = 'breadcrumb-dropdown';
+            dropdown.className = 'fixed bg-mantle border border-surface0 rounded-lg shadow-xl py-1 z-50 min-w-[200px] max-w-[320px] text-left';
+            const rect = ellipsisBtn.getBoundingClientRect();
+            dropdown.style.top = `${rect.bottom + 6}px`;
+            dropdown.style.left = `${Math.max(8, rect.left)}px`;
+
+            const header = document.createElement('div');
+            header.className = 'px-3 py-1 text-[11px] font-semibold text-overlay1 uppercase tracking-wider';
+            header.textContent = 'Intermediate folders';
+            dropdown.appendChild(header);
+
+            middleParts.forEach((part, idx) => {
+                const folderIdx = idx + 1;
+                const folderPath = parts.slice(0, folderIdx + 1).join('/');
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs md:text-sm text-subtext0 hover:text-text hover:bg-surface0 transition-colors';
+
+                const icon = document.createElement('i');
+                icon.setAttribute('data-lucide', 'folder');
+                icon.className = 'w-3.5 h-3.5 text-yellow shrink-0';
+
+                const label = document.createElement('span');
+                label.className = 'truncate';
+                label.textContent = part;
+
+                item.appendChild(icon);
+                item.appendChild(label);
+                item.onclick = (ev) => {
+                    ev.stopPropagation();
+                    closeBreadcrumbDropdown();
+                    loadFile(folderPath, true);
+                };
+                dropdown.appendChild(item);
+            });
+
+            const divider = document.createElement('div');
+            divider.className = 'my-1 border-t border-surface0';
+            dropdown.appendChild(divider);
+
+            const expandItem = document.createElement('button');
+            expandItem.type = 'button';
+            expandItem.className = 'w-full text-left flex items-center gap-2 px-3 py-1.5 text-xs text-subtext0 hover:text-mauve hover:bg-surface0 transition-colors';
+
+            const expandIcon = document.createElement('i');
+            expandIcon.setAttribute('data-lucide', 'unfold-horizontal');
+            expandIcon.className = 'w-3.5 h-3.5 text-mauve shrink-0';
+
+            const expandLabel = document.createElement('span');
+            expandLabel.textContent = 'Expand in breadcrumb';
+
+            expandItem.appendChild(expandIcon);
+            expandItem.appendChild(expandLabel);
+            expandItem.onclick = (ev) => {
+                ev.stopPropagation();
+                closeBreadcrumbDropdown();
+                breadcrumbsExpanded = true;
+                updateBreadcrumbs(path);
+            };
+            dropdown.appendChild(expandItem);
+
+            document.body.appendChild(dropdown);
+            activeBreadcrumbDropdown = dropdown;
+            lucide.createIcons();
+        };
+        container.appendChild(ellipsisBtn);
+
+        const sep2 = document.createElement('span');
+        sep2.className = 'text-overlay1 mx-1 shrink-0';
+        sep2.textContent = '/';
+        container.appendChild(sep2);
+
+        const lastCrumb = document.createElement('span');
+        lastCrumb.className = 'text-subtext1 truncate min-w-0';
+        lastCrumb.textContent = parts[parts.length - 1];
+        lastCrumb.title = path;
+        container.appendChild(lastCrumb);
+        return;
+    }
+
     parts.forEach((part, i) => {
         if (i > 0) {
             const sep = document.createElement('span');
-            sep.className = 'text-overlay1 mx-1';
+            sep.className = 'text-overlay1 mx-1 shrink-0';
             sep.textContent = '/';
             container.appendChild(sep);
         }
         const crumb = document.createElement('span');
         const isLast = i === parts.length - 1;
         if (isLast) {
-            crumb.className = 'text-subtext1';
+            crumb.className = 'text-subtext1 truncate min-w-0';
             crumb.textContent = part;
+            crumb.title = path;
         } else {
-            crumb.className = 'text-subtext0 hover:text-mauve cursor-pointer';
+            crumb.className = 'text-subtext0 hover:text-mauve cursor-pointer truncate max-w-[140px] md:max-w-[200px] shrink-0';
             crumb.textContent = part;
+            crumb.title = part;
             const folderPath = parts.slice(0, i + 1).join('/');
             crumb.onclick = () => loadFile(folderPath, true);
         }
         container.appendChild(crumb);
     });
+
+    if (breadcrumbsExpanded) {
+        const collapseBtn = document.createElement('button');
+        collapseBtn.type = 'button';
+        collapseBtn.className = 'text-subtext0 hover:text-mauve hover:bg-surface0 p-1 ml-1 rounded transition-colors shrink-0';
+        collapseBtn.title = 'Collapse breadcrumb';
+        collapseBtn.innerHTML = '<i data-lucide="fold-horizontal" class="w-3.5 h-3.5"></i>';
+        collapseBtn.onclick = (e) => {
+            e.stopPropagation();
+            breadcrumbsExpanded = false;
+            updateBreadcrumbs(path);
+        };
+        container.appendChild(collapseBtn);
+        lucide.createIcons();
+    }
 }
 
 async function goHome(nav = 'push') {
@@ -355,6 +503,9 @@ async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
     await flushPendingSave();
 
     const thisLoad = ++loadVersion;
+    if (currentPath !== path) {
+        breadcrumbsExpanded = false;
+    }
     currentPath = path;
     // Null while the editor still holds the previous note, so its doc can't autosave under the new path
     editorPath = null;

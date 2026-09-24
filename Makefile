@@ -16,6 +16,7 @@ STATIC_DIR := internal/server/static
 JS_DIR := $(STATIC_DIR)/js
 CSS_DIR := $(STATIC_DIR)/css
 FONTS_DIR := $(STATIC_DIR)/fonts
+STAMP := $(STATIC_DIR)/.assets-stamp
 
 # Asset versions
 TAILWIND_VERSION := 3.4.17
@@ -52,7 +53,10 @@ help: ## Show this help
 # =============================================================================
 # Assets
 # =============================================================================
-assets: ## Download static assets
+assets: $(STAMP) ## Download static assets
+	@:
+
+$(STAMP): $(MAKEFILE_LIST)
 	@echo "$(CYAN)Downloading assets...$(NC)"
 	@mkdir -p $(JS_DIR) $(CSS_DIR) $(FONTS_DIR) $(STATIC_DIR)/icons
 	@curl -sL "https://cdn.tailwindcss.com/$(TAILWIND_VERSION)" -o "$(JS_DIR)/tailwindcss.js"
@@ -63,14 +67,18 @@ assets: ## Download static assets
 	@curl -sL "https://cdn.jsdelivr.net/npm/dompurify@$(DOMPURIFY_VERSION)/dist/purify.min.js" -o "$(JS_DIR)/dompurify.min.js"
 	@curl -sL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/$(HIGHLIGHTJS_VERSION)/styles/github-dark.min.css" -o "$(CSS_DIR)/github-dark.min.css"
 	@curl -sL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/$(HIGHLIGHTJS_VERSION)/styles/github.min.css" -o "$(CSS_DIR)/github.min.css"
-	@curl -sL "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" -H "User-Agent: $(BROWSER_UA)" -o "$(CSS_DIR)/inter.css"
+	@curl -sL "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" -H "User-Agent: $(BROWSER_UA)" -o "$(CSS_DIR)/inter.raw"
+	@awk '/^\/\* /{keep = ($$0 ~ /^\/\* latin(-ext)? \*\/$$/)} keep' "$(CSS_DIR)/inter.raw" > "$(CSS_DIR)/inter.css"
+	@rm -f "$(CSS_DIR)/inter.raw"
 	@grep -o "https://fonts.gstatic.com/[^)']*" "$(CSS_DIR)/inter.css" | sort -u | while read url; do \
 		filename=$$(basename "$$url" | sed 's/?.*//'); \
 		curl -sL "$$url" -o "$(FONTS_DIR)/$$filename"; \
 	done
 	@sed -i.bak -E 's|https://fonts.gstatic.com/s/inter/[^/]+/||g' "$(CSS_DIR)/inter.css" && rm -f "$(CSS_DIR)/inter.css.bak"
 	@sed -i.bak 's|src: url(|src: url(../fonts/|g' "$(CSS_DIR)/inter.css" && rm -f "$(CSS_DIR)/inter.css.bak"
-	@curl -sL "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" -H "User-Agent: $(BROWSER_UA)" -o "$(CSS_DIR)/jetbrains-mono.css"
+	@curl -sL "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" -H "User-Agent: $(BROWSER_UA)" -o "$(CSS_DIR)/jetbrains-mono.raw"
+	@awk '/^\/\* /{keep = ($$0 ~ /^\/\* latin(-ext)? \*\/$$/)} keep' "$(CSS_DIR)/jetbrains-mono.raw" > "$(CSS_DIR)/jetbrains-mono.css"
+	@rm -f "$(CSS_DIR)/jetbrains-mono.raw"
 	@grep -o "https://fonts.gstatic.com/[^)']*" "$(CSS_DIR)/jetbrains-mono.css" | sort -u | while read url; do \
 		filename=$$(basename "$$url" | sed 's/?.*//'); \
 		curl -sL "$$url" -o "$(FONTS_DIR)/$$filename"; \
@@ -78,6 +86,8 @@ assets: ## Download static assets
 	@sed -i.bak -E 's|https://fonts.gstatic.com/s/jetbrainsmono/[^/]+/||g' "$(CSS_DIR)/jetbrains-mono.css" && rm -f "$(CSS_DIR)/jetbrains-mono.css.bak"
 	@sed -i.bak 's|src: url(|src: url(../fonts/|g' "$(CSS_DIR)/jetbrains-mono.css" && rm -f "$(CSS_DIR)/jetbrains-mono.css.bak"
 	@cp $(LOGO_SVG) $(STATIC_DIR)/icons/favicon.svg
+	@$(MAKE) --no-print-directory codemirror
+	@touch $(STAMP)
 	@echo "$(GREEN)Assets downloaded$(NC)"
 
 verify-assets: ## Verify required assets exist
@@ -93,7 +103,7 @@ verify-assets: ## Verify required assets exist
 codemirror: ## Rebuild CodeMirror 6 bundle (requires Node.js)
 	@echo "$(CYAN)Building CodeMirror bundle...$(NC)"
 	@npm install --silent --no-audit --no-fund $(CODEMIRROR_PKGS)
-	@npx esbuild cm-entry.js --bundle --format=iife --global-name=CM --minify --outfile=$(CURDIR)/$(CODEMIRROR_BUNDLE)
+	@npx --yes esbuild cm-entry.js --bundle --format=iife --global-name=CM --minify --outfile=$(CURDIR)/$(CODEMIRROR_BUNDLE)
 	@echo "$(GREEN)CodeMirror bundle built$(NC)"
 
 icons: ## Regenerate app icons from the logo (requires ImageMagick)
@@ -105,7 +115,7 @@ icons: ## Regenerate app icons from the logo (requires ImageMagick)
 	@echo "$(GREEN)Icons generated$(NC)"
 
 clean: ## Remove built artifacts and downloaded assets
-	@rm -f $(APP_NAME) $(APP_NAME)-*
+	@rm -f $(APP_NAME) $(APP_NAME)-* $(STAMP)
 	@rm -rf $(JS_DIR)/*.min.js $(JS_DIR)/tailwindcss.js $(CSS_DIR)/*.css $(FONTS_DIR)/* $(STATIC_DIR)/icons/favicon.svg
 	@rm -rf node_modules package.json package-lock.json
 	@echo "$(GREEN)Cleaned$(NC)"
@@ -113,7 +123,7 @@ clean: ## Remove built artifacts and downloaded assets
 # =============================================================================
 # Build
 # =============================================================================
-build: verify-assets ## Build binary for current platform
+build: assets verify-assets ## Build binary for current platform
 	@go build -ldflags="-s -w -X 'github.com/tanq16/kairo/cmd.AppVersion=$(VERSION)'" -o $(APP_NAME) .
 	@echo "$(GREEN)Built: ./$(APP_NAME)$(NC)"
 
@@ -121,7 +131,7 @@ build-for: verify-assets ## Build binary for specified GOOS/GOARCH
 	@CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-s -w -X 'github.com/tanq16/kairo/cmd.AppVersion=$(VERSION)'" -o $(APP_NAME)-$(GOOS)-$(GOARCH) .
 	@echo "$(GREEN)Built: ./$(APP_NAME)-$(GOOS)-$(GOARCH)$(NC)"
 
-build-all: verify-assets ## Build all platform binaries
+build-all: assets verify-assets ## Build all platform binaries
 	@$(MAKE) build-for GOOS=linux GOARCH=amd64
 	@$(MAKE) build-for GOOS=linux GOARCH=arm64
 	@$(MAKE) build-for GOOS=darwin GOARCH=amd64
@@ -141,9 +151,12 @@ docker-build: ## Build Docker image
 	@docker tag $(DOCKER_USER)/$(APP_NAME):$(VERSION) $(DOCKER_USER)/$(APP_NAME):latest
 	@echo "$(GREEN)Docker image built$(NC)"
 
-docker-push: docker-build ## Push Docker image to Docker Hub
-	@docker push $(DOCKER_USER)/$(APP_NAME):$(VERSION)
-	@docker push $(DOCKER_USER)/$(APP_NAME):latest
+docker-push: ## Build linux/amd64 and linux/arm64 and push one manifest
+	@docker buildx build --platform linux/amd64,linux/arm64 \
+	  --build-arg VERSION=$(VERSION) \
+	  -t $(DOCKER_USER)/$(APP_NAME):$(VERSION) \
+	  -t $(DOCKER_USER)/$(APP_NAME):latest \
+	  --push .
 	@echo "$(GREEN)Docker image pushed$(NC)"
 
 # =============================================================================

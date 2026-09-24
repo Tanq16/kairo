@@ -3,19 +3,18 @@ package server
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
-	"log"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"unicode/utf8"
 
+	"github.com/rs/zerolog/log"
 	"github.com/tanq16/kairo/internal/notes"
 )
 
-// Keep raw error detail in the server log; return only a generic, path-free message to the client
 func writeServiceError(w http.ResponseWriter, action string, err error) {
 	switch {
 	case errors.Is(err, notes.ErrInvalidPath):
@@ -25,7 +24,7 @@ func writeServiceError(w http.ResponseWriter, action string, err error) {
 	case errors.Is(err, notes.ErrExists):
 		http.Error(w, "Destination already exists", http.StatusConflict)
 	default:
-		log.Printf("ERROR Failed to %s: %v", action, err)
+		log.Error().Err(err).Str("action", action).Msg("Failed to execute action")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -64,7 +63,7 @@ func (s *Server) handleTree(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(root.Children)
+	json.MarshalWrite(w, root.Children)
 }
 
 func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +94,7 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 	var req notes.SaveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.UnmarshalRead(r.Body, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -118,9 +117,8 @@ func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
-	// reuse SaveRequest: create needs the same {path, content} shape, unlike autosave it never overwrites
 	var req notes.SaveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.UnmarshalRead(r.Body, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -139,7 +137,7 @@ func (s *Server) handleCreateFile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 	var req notes.ActionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.UnmarshalRead(r.Body, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -155,7 +153,7 @@ func (s *Server) handleCreateDir(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	var req notes.ActionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.UnmarshalRead(r.Body, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -172,7 +170,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	var req notes.ActionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.UnmarshalRead(r.Body, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -228,7 +226,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		results = []notes.SearchResult{} // always emit a JSON array, never null
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(results)
+	json.MarshalWrite(w, results)
 }
 
 // Outside requireWire deliberately: the caller is a script with no client wire version to send

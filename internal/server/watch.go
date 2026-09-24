@@ -2,10 +2,10 @@ package server
 
 import (
 	"cmp"
-	"log"
 	"slices"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/tanq16/kairo/internal/notes"
 )
 
@@ -26,7 +26,7 @@ type scanChange struct {
 func (s *Server) watch() {
 	prev, err := s.service.Scan()
 	if err != nil {
-		log.Printf("ERROR Failed to take initial scan of data directory: %v", err)
+		log.Error().Err(err).Msg("Failed to take initial scan of data directory")
 	}
 	ticker := time.NewTicker(scanInterval)
 	defer ticker.Stop()
@@ -45,7 +45,7 @@ func (s *Server) watch() {
 
 		cur, err := s.service.Scan()
 		if err != nil {
-			log.Printf("ERROR Failed to scan data directory: %v", err)
+			log.Error().Err(err).Msg("Failed to scan data directory")
 			continue
 		}
 		s.emitChanges(diffScan(prev, cur))
