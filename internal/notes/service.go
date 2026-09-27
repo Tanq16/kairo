@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -263,7 +264,10 @@ func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (
 }
 
 func (s *Service) UploadFileToDir(targetDir string, file io.Reader, filename string) (string, error) {
-	cleanName := path.Base(filename)
+	cleanName := filepath.Base(filepath.ToSlash(filename))
+	if cleanName == "" || cleanName == "." || cleanName == ".." || cleanName == "/" {
+		return "", ErrInvalidPath
+	}
 	dest := cleanName
 	if targetDir != "" && targetDir != "." {
 		dest = path.Join(targetDir, cleanName)

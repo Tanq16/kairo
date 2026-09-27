@@ -232,18 +232,20 @@ function initUploadHandlers() {
 }
 
 async function uploadAndInsertFile(file) {
+    const targetPath = currentPath;
     const formData = new FormData();
     formData.append('file', file);
     try {
         // notePath rides in the query string because FormData normalizes newlines in a field value; no Content-Type header, so the browser sets the multipart boundary
-        const res = await fetch(`${KAIRO_ROUTES}/api/upload?notePath=${encodeURIComponent(currentPath)}`, { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE }, body: formData });
+        const res = await fetch(`${KAIRO_ROUTES}/api/upload?notePath=${encodeURIComponent(targetPath)}`, { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE }, body: formData });
         if (!res.ok) throw new Error('upload failed: ' + res.status);
         const relPath = await res.text();
+        await refreshTree();
+        if (currentPath !== targetPath) return;
         const isImage = file.type.startsWith('image/') || hasExt(file.name, IMAGE_EXTS);
         const snippet = isImage ? `![${file.name}](${encodeMdDest(relPath)})` : `[${file.name}](${encodeMdDest(relPath)})`;
         view.dispatch(view.state.replaceSelection(snippet));
         view.focus();
-        await refreshTree();
     } catch (e) {
         console.error('Upload failed:', e);
         showToast(`Failed to upload ${file.name}`, 'error');

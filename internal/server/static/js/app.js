@@ -493,6 +493,7 @@ function showPreviewPane() {
 function showPdfPane(path, hash = '') {
     els.editorContainer.classList.add('hidden');
     els.previewContainer.classList.add('hidden');
+    els.markdownBody.innerHTML = '';
     els.pdfContainer.classList.remove('hidden');
     els.pdfFrame.src = fileApiUrl(path) + (hash ? '#' + hash : '');
     els.previewBtn.classList.add('hidden');
@@ -577,6 +578,7 @@ async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
     if (!path) {
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.add('hidden');
+        els.markdownBody.innerHTML = '';
         els.previewBtn.classList.add('hidden');
         hideToc();
         return;
