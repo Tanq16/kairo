@@ -3,6 +3,8 @@
 const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
 const NOTE_EXTS = ['.md', '.markdown', '.txt'];
 const PDF_EXTS = ['.pdf'];
+const AUDIO_EXTS = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'];
+const VIDEO_EXTS = ['.mp4', '.webm', '.mov'];
 
 function hasExt(path, exts) {
     const lower = path.toLowerCase();
@@ -45,7 +47,7 @@ function fileApiUrl(path) {
 function opensInApp(path, isDir) {
     if (isDir) return true;
     const name = basename(path);
-    return !name.includes('.') || hasExt(name, NOTE_EXTS) || hasExt(name, IMAGE_EXTS) || hasExt(name, PDF_EXTS);
+    return !name.includes('.') || hasExt(name, NOTE_EXTS) || hasExt(name, IMAGE_EXTS) || hasExt(name, PDF_EXTS) || hasExt(name, AUDIO_EXTS) || hasExt(name, VIDEO_EXTS);
 }
 
 function fixImagePaths() {

@@ -462,6 +462,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     els.fileTree.ondrop = async (e) => {
         e.preventDefault();
         els.fileTree.classList.remove('bg-surface0/50');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            await uploadFilesToDir(e.dataTransfer.files, '');
+            return;
+        }
         const draggedPath = e.dataTransfer.getData('text/plain');
         if (!draggedPath) return;
         await moveItem(draggedPath, draggedPath.split('/').pop());
@@ -513,6 +517,30 @@ function renderNotice(message) {
     els.markdownBody.appendChild(p);
 }
 
+async function uploadFilesToDir(files, targetDir = '') {
+    let lastSavedPath = null;
+    for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const res = await fetch(`${KAIRO_ROUTES}/api/upload?dir=${encodeURIComponent(targetDir)}`, {
+                method: 'POST',
+                headers: { 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE },
+                body: formData
+            });
+            if (!res.ok) throw new Error('upload failed: ' + res.status);
+            lastSavedPath = await res.text();
+        } catch (e) {
+            console.error('Upload failed:', e);
+            showToast(`Failed to upload ${file.name}`, 'error');
+        }
+    }
+    await refreshTree();
+    if (files.length === 1 && lastSavedPath) {
+        await loadFile(lastSavedPath);
+    }
+}
+
 async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
     // Both null and '' mean "no note open", so re-entering the home state must not stack a second identical entry
     const samePath = (currentPath || '') === (path || '');
@@ -534,7 +562,8 @@ async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
 
     els.moveBtn.classList.toggle('hidden', !path);
     els.deleteBtn.classList.toggle('hidden', !path);
-    if (els.printBtn) els.printBtn.classList.toggle('hidden', !path || isDir || hasExt(path, PDF_EXTS));
+    const isNote = path && !isDir && (!basename(path).includes('.') || hasExt(path, NOTE_EXTS));
+    if (els.printBtn) els.printBtn.classList.toggle('hidden', !isNote);
 
     hidePdfPane();
 
@@ -561,6 +590,28 @@ async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
     if (hasExt(path, IMAGE_EXTS)) {
         showPreviewPane();
         els.markdownBody.innerHTML = `<img src="${fileApiUrl(path)}" alt="${escapeHtml(path.split('/').pop())}" style="max-width:100%; border-radius:0.5rem;">`;
+        els.previewContainer.scrollTop = 0;
+        return;
+    }
+
+    if (hasExt(path, AUDIO_EXTS)) {
+        showPreviewPane();
+        els.markdownBody.innerHTML = `<div class="p-6 bg-surface0/30 rounded-xl flex flex-col items-center gap-4"><p class="font-medium text-text">${escapeHtml(basename(path))}</p><audio controls class="w-full max-w-md" src="${fileApiUrl(path)}"></audio></div>`;
+        els.previewContainer.scrollTop = 0;
+        return;
+    }
+
+    if (hasExt(path, VIDEO_EXTS)) {
+        showPreviewPane();
+        els.markdownBody.innerHTML = `<div class="p-4 bg-surface0/30 rounded-xl flex flex-col items-center gap-4"><video controls class="w-full max-w-3xl rounded-lg" src="${fileApiUrl(path)}"></video><p class="text-xs text-subtext0">${escapeHtml(basename(path))}</p></div>`;
+        els.previewContainer.scrollTop = 0;
+        return;
+    }
+
+    if (basename(path).includes('.') && !hasExt(path, NOTE_EXTS)) {
+        showPreviewPane();
+        els.markdownBody.innerHTML = `<div class="p-8 bg-surface0/20 rounded-xl text-center flex flex-col items-center gap-3"><i data-lucide="alert-triangle" class="w-8 h-8 text-yellow"></i><p class="text-text font-medium">Cannot preview "${escapeHtml(basename(path))}"</p><p class="text-sm text-subtext0">This file type is not supported for inline viewing.</p><a href="${fileApiUrl(path)}" download class="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-surface0 hover:bg-surface1 text-text text-sm rounded-lg transition-colors"><i data-lucide="download" class="w-4 h-4"></i><span>Download file</span></a></div>`;
+        lucide.createIcons();
         els.previewContainer.scrollTop = 0;
         return;
     }
@@ -994,8 +1045,19 @@ function renderTree(nodes, container) {
 
         const row = document.createElement('div');
         row.className = 'flex items-center gap-2 py-1 cursor-pointer text-subtext0 hover:text-mauve text-sm truncate group';
-        const icon = document.createElement('i');
-        icon.setAttribute('data-lucide', node.isDir ? 'folder' : 'file-text');
+        let iconName = 'file-text';
+        if (node.isDir) {
+            iconName = 'folder';
+        } else if (hasExt(node.name, IMAGE_EXTS)) {
+            iconName = 'file-image';
+        } else if (hasExt(node.name, AUDIO_EXTS)) {
+            iconName = 'file-audio';
+        } else if (hasExt(node.name, VIDEO_EXTS)) {
+            iconName = 'file-video';
+        } else if (hasExt(node.name, ['.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar'])) {
+            iconName = 'file-archive';
+        }
+        icon.setAttribute('data-lucide', iconName);
         icon.className = 'w-4 h-4';
         const name = document.createElement('span');
         name.textContent = node.name;
@@ -1028,6 +1090,10 @@ function renderTree(nodes, container) {
                 e.preventDefault();
                 e.stopPropagation();
                 row.classList.remove('bg-surface0');
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    await uploadFilesToDir(e.dataTransfer.files, node.path);
+                    return;
+                }
                 const draggedPath = e.dataTransfer.getData('text/plain');
                 if (!draggedPath) return;
                 const itemName = draggedPath.split('/').pop();

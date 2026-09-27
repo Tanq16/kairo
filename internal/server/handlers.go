@@ -188,8 +188,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	// cap the whole request so oversized uploads fail instead of buffering unbounded input
-	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, 50<<20)
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			http.Error(w, "File too large", http.StatusRequestEntityTooLarge)
 			return
@@ -205,14 +205,31 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	notePath := r.FormValue("notePath")
-	relPath, err := s.service.UploadFile(notePath, file, header.Filename)
+	var relPath string
+	targetDir := r.FormValue("dir")
+	if targetDir != "" || r.URL.Query().Has("dir") {
+		if targetDir == "" {
+			targetDir = r.URL.Query().Get("dir")
+		}
+		relPath, err = s.service.UploadFileToDir(targetDir, file, header.Filename)
+		if err == nil {
+			s.hub.emit(Event{Op: "create", Path: relPath, Origin: clientID(r)})
+		}
+	} else {
+		notePath := r.FormValue("notePath")
+		if notePath == "" {
+			notePath = r.URL.Query().Get("notePath")
+		}
+		relPath, err = s.service.UploadFile(notePath, file, header.Filename)
+		if err == nil {
+			s.hub.emit(Event{Op: "upload", Path: notePath, Origin: clientID(r)})
+		}
+	}
 	if err != nil {
 		writeServiceError(w, "upload file", err)
 		return
 	}
 
-	s.hub.emit(Event{Op: "upload", Path: notePath, Origin: clientID(r)})
 	w.Write([]byte(relPath))
 }
 
