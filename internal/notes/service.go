@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -255,6 +256,32 @@ func (s *Service) UploadFile(notePath string, file io.Reader, filename string) (
 		err := s.storage.SaveFileFrom(destPath, file)
 		if err == nil {
 			return relPath, nil
+		}
+		if !errors.Is(err, ErrExists) {
+			return "", err
+		}
+	}
+}
+
+func (s *Service) UploadFileToDir(targetDir string, file io.Reader, filename string) (string, error) {
+	cleanName := filepath.Base(filepath.ToSlash(filename))
+	if cleanName == "" || cleanName == "." || cleanName == ".." || cleanName == "/" {
+		return "", ErrInvalidPath
+	}
+	dest := cleanName
+	if targetDir != "" && targetDir != "." {
+		dest = path.Join(targetDir, cleanName)
+	}
+	ext := path.Ext(dest)
+	stem := strings.TrimSuffix(dest, ext)
+	for n := 0; ; n++ {
+		candidate := dest
+		if n > 0 {
+			candidate = fmt.Sprintf("%s-(%d)%s", stem, n, ext)
+		}
+		err := s.storage.SaveFileFrom(candidate, file)
+		if err == nil {
+			return candidate, nil
 		}
 		if !errors.Is(err, ErrExists) {
 			return "", err

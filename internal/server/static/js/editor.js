@@ -204,9 +204,12 @@ function initUploadHandlers() {
         if (!currentPath || previewMode) return;
         const items = e.clipboardData.items;
         for (const item of items) {
-            if (item.type.startsWith('image')) {
-                e.preventDefault();
-                await uploadAndInsertImage(item.getAsFile());
+            if (item.kind === 'file') {
+                const file = item.getAsFile();
+                if (file) {
+                    e.preventDefault();
+                    await uploadAndInsertFile(file);
+                }
             }
         }
     });
@@ -216,31 +219,35 @@ function initUploadHandlers() {
     });
     els.editorContainer.addEventListener('drop', async (e) => {
         if (!currentPath || previewMode) return;
-        const images = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
-        if (!images.length) return;
+        const files = [...e.dataTransfer.files];
+        if (!files.length) return;
         e.preventDefault();
         // posAtCoords is null when dropped outside the text; then fall back to the existing caret
         const dropPos = view.posAtCoords({ x: e.clientX, y: e.clientY });
         if (dropPos != null) view.dispatch({ selection: { anchor: dropPos } });
-        for (const file of images) {
-            await uploadAndInsertImage(file);
+        for (const file of files) {
+            await uploadAndInsertFile(file);
         }
     });
 }
 
-async function uploadAndInsertImage(file) {
+async function uploadAndInsertFile(file) {
+    const targetPath = currentPath;
     const formData = new FormData();
     formData.append('file', file);
     try {
         // notePath rides in the query string because FormData normalizes newlines in a field value; no Content-Type header, so the browser sets the multipart boundary
-        const res = await fetch(`${KAIRO_ROUTES}/api/upload?notePath=${encodeURIComponent(currentPath)}`, { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE }, body: formData });
+        const res = await fetch(`${KAIRO_ROUTES}/api/upload?notePath=${encodeURIComponent(targetPath)}`, { method: 'POST', headers: { 'X-Kairo-Client': KAIRO_CLIENT, 'X-Kairo-Wire': KAIRO_WIRE }, body: formData });
         if (!res.ok) throw new Error('upload failed: ' + res.status);
-        const imgPath = await res.text();
-        view.dispatch(view.state.replaceSelection(`![Attachment](${encodeMdDest(imgPath)})`));
-        view.focus();
+        const relPath = await res.text();
         await refreshTree();
+        if (currentPath !== targetPath) return;
+        const isImage = file.type.startsWith('image/') || hasExt(file.name, IMAGE_EXTS);
+        const snippet = isImage ? `![${file.name}](${encodeMdDest(relPath)})` : `[${file.name}](${encodeMdDest(relPath)})`;
+        view.dispatch(view.state.replaceSelection(snippet));
+        view.focus();
     } catch (e) {
         console.error('Upload failed:', e);
-        showToast('Failed to upload image', 'error');
+        showToast(`Failed to upload ${file.name}`, 'error');
     }
 }
