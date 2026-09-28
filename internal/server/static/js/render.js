@@ -243,6 +243,7 @@ function renderMarkdownBody(content) {
 
 function togglePreview(force = null) {
     previewMode = force !== null ? force : !previewMode;
+    localStorage.setItem('kairo-preview-mode', String(previewMode));
 
     if (previewMode) {
         renderMarkdownBody(view.state.doc.toString());
@@ -250,11 +251,19 @@ function togglePreview(force = null) {
         els.editorContainer.classList.add('hidden');
         els.previewContainer.classList.remove('hidden');
         els.previewBtn.innerHTML = '<i data-lucide="edit" class="w-4 h-4"></i><span>Edit</span>';
+        els.previewBtn.title = 'Edit view (Cmd+E)';
+        if (els.sourceModeBtn) els.sourceModeBtn.classList.add('hidden');
     } else {
         hideToc();
         els.editorContainer.classList.remove('hidden');
         els.previewContainer.classList.add('hidden');
         els.previewBtn.innerHTML = '<i data-lucide="eye" class="w-4 h-4"></i><span>Preview</span>';
+        els.previewBtn.title = 'Reading view (Cmd+E)';
+        if (els.sourceModeBtn && currentPath && !hasExt(currentPath, PDF_EXTS) && !hasExt(currentPath, AUDIO_EXTS) && !hasExt(currentPath, VIDEO_EXTS) && !hasExt(currentPath, IMAGE_EXTS)) {
+            els.sourceModeBtn.classList.remove('hidden');
+            if (typeof updateSourceModeBtn === 'function') updateSourceModeBtn();
+        }
+        if (view) view.focus();
     }
     lucide.createIcons();
 }

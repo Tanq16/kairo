@@ -28,7 +28,7 @@ DOMPURIFY_VERSION := 3.4.12
 CODEMIRROR_BUNDLE := $(JS_DIR)/codemirror-bundle.min.js
 CODEMIRROR_PKGS := @codemirror/view@6.43.7 @codemirror/state@6.7.1 @codemirror/lang-markdown@6.5.1 \
 	@codemirror/commands@6.10.4 @codemirror/autocomplete@6.20.3 @codemirror/language@6.12.4 \
-	@lezer/highlight@1.2.3
+	@lezer/highlight@1.2.3 @lezer/markdown@1.7.2
 
 LOGO_SVG := .github/assets/logo.svg
 
