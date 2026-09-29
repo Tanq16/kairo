@@ -93,6 +93,61 @@
         #editor .cm-gutters {
             display: none;
         }
+        #editor .cm-heading-1 { font-size: 1.875rem; font-weight: 700; line-height: 1.25; border-bottom: 1px solid var(--surface0); padding-bottom: 0.25rem; }
+        #editor .cm-heading-2 { font-size: 1.5rem; font-weight: 700; line-height: 1.3; border-bottom: 1px solid rgb(from var(--surface0) r g b / 0.5); padding-bottom: 0.25rem; }
+        #editor .cm-heading-3 { font-size: 1.25rem; font-weight: 600; line-height: 1.35; }
+        #editor .cm-heading-4 { font-size: 1.1rem; font-weight: 600; line-height: 1.4; }
+        #editor .cm-heading-5 { font-size: 1rem; font-weight: 600; line-height: 1.4; }
+        #editor .cm-heading-6 { font-size: 0.875rem; font-weight: 600; line-height: 1.4; }
+
+        #editor .cm-mermaid-widget {
+            background-color: var(--base);
+            border: 1px solid var(--surface0);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin: 1rem 0;
+            text-align: center;
+            overflow-x: auto;
+            cursor: pointer;
+            user-select: none;
+            transition: border-color 0.15s ease;
+        }
+        #editor .cm-mermaid-widget:hover { border-color: rgb(from var(--mauve) r g b / 0.5); }
+        #editor .cm-mermaid-widget svg { margin: 0 auto; display: inline-block; }
+
+        #editor .cm-table-widget {
+            margin: 1rem 0;
+            overflow-x: auto;
+            cursor: pointer;
+            user-select: none;
+        }
+        #editor .cm-table-widget table {
+            display: table !important;
+            width: 100% !important;
+            border-collapse: separate;
+            border-spacing: 0;
+            border: 1px solid rgb(from var(--surface1) r g b / 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 0 !important;
+            transition: border-color 0.15s ease;
+        }
+        #editor .cm-table-widget:hover table { border-color: rgb(from var(--mauve) r g b / 0.5); }
+        #editor .cm-table-widget table thead { background-color: rgb(from var(--mauve) r g b / 0.1); }
+        #editor .cm-table-widget table tr { background-color: transparent !important; border: none !important; }
+        #editor .cm-table-widget table tr:nth-child(2n) { background-color: rgb(from var(--surface0) r g b / 0.3) !important; }
+        #editor .cm-table-widget table th {
+            color: var(--mauve) !important; font-weight: 600;
+            border: none !important; border-bottom: 1px solid rgb(from var(--surface1) r g b / 0.5) !important;
+            border-right: 1px solid rgb(from var(--surface0) r g b / 0.5); padding: 10px 14px !important; text-align: left;
+        }
+        #editor .cm-table-widget table td {
+            border: none !important; border-bottom: 1px solid rgb(from var(--surface0) r g b / 0.3) !important;
+            border-right: 1px solid rgb(from var(--surface0) r g b / 0.3); color: var(--subtext0) !important;
+            padding: 10px 14px !important; text-align: left;
+        }
+        #editor .cm-table-widget table th:last-child, #editor .cm-table-widget table td:last-child { border-right: none; }
+        #editor .cm-table-widget table tr:last-child td { border-bottom: none !important; }
 
         #print-pages { position: fixed; left: -10000px; top: 0; }
         .print-page {
@@ -515,7 +570,10 @@
                 <button id="print-btn" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors hidden" title="Print Document">
                     <i data-lucide="printer" class="w-4 h-4"></i>
                 </button>
-                <button id="preview-btn" class="bg-surface0 px-3 py-1 rounded text-sm hover:bg-surface1 flex items-center gap-2" title="Toggle preview">
+                <button id="source-mode-btn" class="text-subtext0 hover:bg-surface0 hover:text-mauve p-2 rounded transition-colors hidden" title="Toggle source mode">
+                    <i data-lucide="code" class="w-4 h-4"></i>
+                </button>
+                <button id="preview-btn" class="bg-surface0 px-3 py-1 rounded text-sm hover:bg-surface1 flex items-center gap-2" title="Toggle preview (Cmd+E)">
                     <i data-lucide="eye" class="w-4 h-4"></i>
                     <span>Preview</span>
                 </button>

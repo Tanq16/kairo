@@ -9,16 +9,319 @@ let saveFailed = false;
 // One in-flight drain at a time; awaiting callers (move/load) get the live promise, not an early return
 let flushPromise = null;
 
+let sourceMode = localStorage.getItem('kairo-source-mode') === 'true';
+let livePreviewCompartment = null;
+let livePreviewField = null;
+let mermaidIdCounter = 0;
+const mermaidSvgCache = new Map();
+
+function extractCodeBlockContent(rawText) {
+    const lines = rawText.split('\n');
+    if (lines.length <= 2) return '';
+    return lines.slice(1, -1).join('\n');
+}
+
+async function renderMermaidWidgetContent(container, code) {
+    if (typeof mermaid === 'undefined') {
+        container.textContent = code;
+        return;
+    }
+    const cached = mermaidSvgCache.get(code);
+    if (cached) {
+        container.innerHTML = cached;
+        return;
+    }
+    const id = 'cm-mermaid-' + (++mermaidIdCounter);
+    try {
+        mermaid.initialize(buildMermaidConfig());
+        const { svg } = await mermaid.render(id, code);
+        mermaidSvgCache.set(code, svg);
+        if (container.isConnected) {
+            container.innerHTML = svg;
+        }
+    } catch (err) {
+        const tempEl = document.getElementById(id);
+        if (tempEl) tempEl.remove();
+        const dtempEl = document.getElementById('d' + id);
+        if (dtempEl) dtempEl.remove();
+        if (container.isConnected) {
+            container.innerHTML = `<div class="p-3 text-left bg-red/10 text-red rounded border border-red/30 text-xs font-mono whitespace-pre-wrap"><div class="font-bold mb-1">Mermaid syntax error (click to edit):</div>${escapeHtml(code)}</div>`;
+        }
+    }
+}
+
+class MermaidWidget extends CM.WidgetType {
+    constructor(code, from, to) {
+        super();
+        this.code = code;
+        this.from = from;
+        this.to = to;
+    }
+
+    eq(other) {
+        return this.code === other.code && this.from === other.from && this.to === other.to;
+    }
+
+    updateDOM(dom, view) {
+        if (dom._code === this.code) {
+            dom._from = this.from;
+            dom._to = this.to;
+            return true;
+        }
+        return false;
+    }
+
+    toDOM(view) {
+        const container = document.createElement('div');
+        container.className = 'cm-mermaid-widget';
+        container._code = this.code;
+        container._from = this.from;
+        container._to = this.to;
+        container.title = 'Click to edit diagram';
+
+        container.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            let targetPos = container._from != null ? container._from : view.posAtDOM(container);
+            try {
+                const targetLine = view.state.doc.lineAt(targetPos);
+                if (targetLine.number < view.state.doc.lines) {
+                    targetPos = view.state.doc.line(targetLine.number + 1).from;
+                }
+            } catch (err) {}
+            view.dispatch({
+                selection: { anchor: targetPos },
+                scrollIntoView: true
+            });
+            view.focus();
+        });
+
+        if (!this.code.trim()) {
+            container.innerHTML = '<span class="text-xs text-subtext0 font-mono">Empty mermaid diagram (click to edit)</span>';
+            return container;
+        }
+
+        renderMermaidWidgetContent(container, this.code);
+        return container;
+    }
+
+    ignoreEvent(e) {
+        return e.type === 'click' || e.type === 'mousedown';
+    }
+}
+
+class TableWidget extends CM.WidgetType {
+    constructor(markdownText, from, to) {
+        super();
+        this.markdownText = markdownText;
+        this.from = from;
+        this.to = to;
+    }
+
+    eq(other) {
+        return this.markdownText === other.markdownText && this.from === other.from && this.to === other.to;
+    }
+
+    updateDOM(dom, view) {
+        if (dom._text === this.markdownText) {
+            dom._from = this.from;
+            dom._to = this.to;
+            return true;
+        }
+        return false;
+    }
+
+    toDOM(view) {
+        const container = document.createElement('div');
+        container.className = 'cm-table-widget';
+        container._text = this.markdownText;
+        container._from = this.from;
+        container._to = this.to;
+        container.title = 'Click to edit table';
+
+        container.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            let targetPos = container._from != null ? container._from : view.posAtDOM(container);
+            try {
+                const tr = e.target.closest('tr');
+                if (tr) {
+                    const tbody = tr.closest('tbody');
+                    const thead = tr.closest('thead');
+                    let lineOffset = 0;
+                    if (thead) {
+                        lineOffset = 0;
+                    } else if (tbody) {
+                        const rowIndex = Array.from(tbody.children).indexOf(tr);
+                        lineOffset = rowIndex >= 0 ? 2 + rowIndex : 2;
+                    }
+                    const startLine = view.state.doc.lineAt(targetPos);
+                    const targetLineNum = Math.min(view.state.doc.lines, startLine.number + lineOffset);
+                    targetPos = view.state.doc.line(targetLineNum).from;
+                }
+            } catch (err) {}
+            view.dispatch({
+                selection: { anchor: targetPos },
+                scrollIntoView: true
+            });
+            view.focus();
+        });
+
+        if (typeof marked !== 'undefined') {
+            const parsed = marked.parse(this.markdownText);
+            container.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(parsed) : parsed;
+            container.querySelectorAll('img').forEach(img => {
+                if (typeof linkTarget === 'function') {
+                    const target = linkTarget(img.getAttribute('src'));
+                    if (target && target.path && typeof fileApiUrl === 'function' && typeof resolveLink === 'function') {
+                        img.src = fileApiUrl(resolveLink(target.path).path);
+                    }
+                }
+            });
+        } else {
+            container.textContent = this.markdownText;
+        }
+        return container;
+    }
+
+    ignoreEvent(e) {
+        return e.type === 'click' || e.type === 'mousedown';
+    }
+}
+
+function buildLivePreviewDecorations(state) {
+    const builder = new CM.RangeSetBuilder();
+    const tree = CM.syntaxTree(state);
+    const ranges = state.selection.ranges;
+    let lastFrom = -1;
+
+    tree.iterate({
+        enter(node) {
+            if (node.name.startsWith('ATXHeading')) {
+                const level = node.name.slice(10);
+                const line = state.doc.lineAt(node.from);
+                if (line.from > lastFrom) {
+                    builder.add(line.from, line.from, CM.Decoration.line({ class: 'cm-heading-' + level }));
+                    lastFrom = line.from;
+                }
+                return false;
+            }
+            if (node.name === 'SetextHeading1') {
+                const line = state.doc.lineAt(node.from);
+                if (line.from > lastFrom) {
+                    builder.add(line.from, line.from, CM.Decoration.line({ class: 'cm-heading-1' }));
+                    lastFrom = line.from;
+                }
+                return false;
+            }
+            if (node.name === 'SetextHeading2') {
+                const line = state.doc.lineAt(node.from);
+                if (line.from > lastFrom) {
+                    builder.add(line.from, line.from, CM.Decoration.line({ class: 'cm-heading-2' }));
+                    lastFrom = line.from;
+                }
+                return false;
+            }
+            if (node.name === 'FencedCode') {
+                const infoNode = node.node.getChild('CodeInfo');
+                const info = infoNode ? state.sliceDoc(infoNode.from, infoNode.to).trim().toLowerCase() : '';
+                if (info === 'mermaid') {
+                    let markCount = 0;
+                    let child = node.node.firstChild;
+                    while (child) {
+                        if (child.name === 'CodeMark') markCount++;
+                        child = child.nextSibling;
+                    }
+                    if (markCount >= 2) {
+                        const lineFrom = state.doc.lineAt(node.from).from;
+                        const lineTo = state.doc.lineAt(node.to).to;
+                        const overlaps = ranges.some(r => r.from <= lineTo && r.to >= lineFrom);
+                        if (!overlaps && lineFrom > lastFrom && lineFrom < lineTo) {
+                            const rawText = state.sliceDoc(node.from, node.to);
+                            const code = extractCodeBlockContent(rawText);
+                            builder.add(lineFrom, lineTo, CM.Decoration.replace({
+                                widget: new MermaidWidget(code, lineFrom, lineTo),
+                                block: true
+                            }));
+                            lastFrom = lineTo;
+                        }
+                    }
+                }
+                return false;
+            }
+            if (node.name === 'Table') {
+                const lineFrom = state.doc.lineAt(node.from).from;
+                const lineTo = state.doc.lineAt(node.to).to;
+                const overlaps = ranges.some(r => r.from <= lineTo && r.to >= lineFrom);
+                if (!overlaps && lineFrom > lastFrom && lineFrom < lineTo) {
+                    const rawText = state.sliceDoc(lineFrom, lineTo);
+                    builder.add(lineFrom, lineTo, CM.Decoration.replace({
+                        widget: new TableWidget(rawText, lineFrom, lineTo),
+                        block: true
+                    }));
+                    lastFrom = lineTo;
+                }
+                return false;
+            }
+        }
+    });
+
+    return builder.finish();
+}
+
+function setLivePreviewEnabled(enabled) {
+    if (!view || !livePreviewCompartment || !livePreviewField) return;
+    view.dispatch({
+        effects: livePreviewCompartment.reconfigure(enabled ? [livePreviewField] : [])
+    });
+}
+
+function toggleSourceMode(force = null) {
+    sourceMode = force !== null ? force : !sourceMode;
+    localStorage.setItem('kairo-source-mode', String(sourceMode));
+    updateSourceModeBtn();
+    if (previewMode) {
+        togglePreview(false);
+    }
+    setLivePreviewEnabled(!sourceMode);
+}
+
+function updateSourceModeBtn() {
+    if (!els.sourceModeBtn) return;
+    if (sourceMode) {
+        els.sourceModeBtn.classList.add('text-mauve', 'bg-surface0');
+        els.sourceModeBtn.title = 'Source mode (active) - click for Live Preview';
+    } else {
+        els.sourceModeBtn.classList.remove('text-mauve', 'bg-surface0');
+        els.sourceModeBtn.title = 'Toggle source mode (plain text)';
+    }
+}
+
 function initEditor() {
     const {
         EditorView, keymap, drawSelection, highlightActiveLine, highlightSpecialChars,
-        EditorState,
-        markdown, markdownLanguage, markdownKeymap,
+        EditorState, StateField, Compartment,
+        markdown, markdownLanguage, markdownKeymap, GFM,
         defaultKeymap, indentWithTab, history, historyKeymap,
         closeBrackets, closeBracketsKeymap,
         syntaxHighlighting, HighlightStyle, bracketMatching, indentUnit,
         tags
     } = CM;
+
+    livePreviewField = StateField.define({
+        create(state) {
+            return buildLivePreviewDecorations(state);
+        },
+        update(decorations, tr) {
+            if (tr.docChanged || tr.selection) {
+                return buildLivePreviewDecorations(tr.state);
+            }
+            return decorations;
+        },
+        provide: f => EditorView.decorations.from(f)
+    });
+
+    livePreviewCompartment = new Compartment();
 
     const catppuccinTheme = EditorView.theme({
         '&': {
@@ -61,7 +364,8 @@ function initEditor() {
     const extensions = [
         catppuccinTheme,
         syntaxHighlighting(catppuccinHighlight),
-        markdown({ base: markdownLanguage }),
+        markdown({ base: markdownLanguage, extensions: [GFM] }),
+        livePreviewCompartment.of(sourceMode ? [] : [livePreviewField]),
         history(),
         drawSelection(),
         highlightActiveLine(),
@@ -71,6 +375,7 @@ function initEditor() {
         indentUnit.of('  '),
         EditorState.tabSize.of(2),
         keymap.of([
+            { key: 'Mod-e', run: () => { togglePreview(); return true; } },
             ...closeBracketsKeymap,
             ...markdownKeymap,
             ...historyKeymap,

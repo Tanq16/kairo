@@ -11,6 +11,7 @@ const els = {
     filenameDisplay: document.getElementById('current-filename'),
     unsavedIndicator: document.getElementById('unsaved-indicator'),
     previewBtn: document.getElementById('preview-btn'),
+    sourceModeBtn: document.getElementById('source-mode-btn'),
     printBtn: document.getElementById('print-btn'),
     themeToggle: document.getElementById('theme-toggle'),
     deleteBtn: document.getElementById('delete-btn'),
@@ -62,7 +63,7 @@ const els = {
 
 let currentPath = null;
 let unsaved = false;
-let previewMode = false;
+let previewMode = localStorage.getItem('kairo-preview-mode') === 'true';
 let sidebarCollapsed = localStorage.getItem('kairo-sidebar-collapsed') === 'true';
 let tocVisible = localStorage.getItem('kairo-toc-visible') !== 'false';
 let loadVersion = 0;
@@ -211,6 +212,12 @@ window.addEventListener('resize', closeBreadcrumbDropdown);
 window.addEventListener('scroll', closeBreadcrumbDropdown, true);
 window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeBreadcrumbDropdown();
+    if (!e.defaultPrevented && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') {
+        if (currentPath && els.pdfContainer && els.pdfContainer.classList.contains('hidden')) {
+            e.preventDefault();
+            togglePreview();
+        }
+    }
 });
 
 function updateBreadcrumbs(path) {
@@ -388,6 +395,8 @@ function toggleTheme() {
     document.getElementById('hljs-light').disabled = dark;
     setThemeIcon();
     lucide.createIcons();
+    if (typeof mermaidSvgCache !== 'undefined') mermaidSvgCache.clear();
+    if (typeof setLivePreviewEnabled === 'function') setLivePreviewEnabled(!sourceMode);
     queueRender(() => renderMermaid(els.markdownBody, buildMermaidConfig()));
 }
 
@@ -486,6 +495,7 @@ function showPreviewPane() {
     els.editorContainer.classList.add('hidden');
     els.previewContainer.classList.remove('hidden');
     els.previewBtn.classList.add('hidden');
+    if (els.sourceModeBtn) els.sourceModeBtn.classList.add('hidden');
     previewMode = true;
     hideToc();
 }
@@ -497,6 +507,7 @@ function showPdfPane(path, hash = '') {
     els.pdfContainer.classList.remove('hidden');
     els.pdfFrame.src = fileApiUrl(path) + (hash ? '#' + hash : '');
     els.previewBtn.classList.add('hidden');
+    if (els.sourceModeBtn) els.sourceModeBtn.classList.add('hidden');
     if (els.printBtn) els.printBtn.classList.add('hidden');
     if (els.widthToggle) els.widthToggle.classList.add('hidden');
     hideToc();
@@ -580,6 +591,7 @@ async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
         els.previewContainer.classList.add('hidden');
         els.markdownBody.innerHTML = '';
         els.previewBtn.classList.add('hidden');
+        if (els.sourceModeBtn) els.sourceModeBtn.classList.add('hidden');
         hideToc();
         return;
     }
@@ -639,11 +651,17 @@ async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
         }
         editorPath = path;
         els.previewBtn.classList.remove('hidden');
+        if (els.sourceModeBtn) {
+            els.sourceModeBtn.classList.remove('hidden');
+            updateSourceModeBtn();
+        }
         // Keep the badge if the outgoing file still has a queued or failed save
         updateUnsavedIndicator();
 
-        togglePreview(true);
-        els.previewContainer.scrollTop = 0;
+        togglePreview(previewMode);
+        if (previewMode) {
+            els.previewContainer.scrollTop = 0;
+        }
     } catch(e) {
         if (thisLoad !== loadVersion) return;
         console.error(e);
@@ -651,6 +669,7 @@ async function loadFile(path, isDir = false, { nav = 'push', hash = '' } = {}) {
         showPreviewPane();
         els.moveBtn.classList.add('hidden');
         els.deleteBtn.classList.add('hidden');
+        if (els.sourceModeBtn) els.sourceModeBtn.classList.add('hidden');
         if (els.printBtn) els.printBtn.classList.add('hidden');
         renderNotice(`Could not load ${path}`);
         els.previewContainer.scrollTop = 0;
@@ -821,6 +840,7 @@ function initEventListeners() {
     });
 
     els.previewBtn.addEventListener('click', () => togglePreview());
+    els.sourceModeBtn?.addEventListener('click', () => toggleSourceMode());
     els.themeToggle.addEventListener('click', toggleTheme);
     els.widthToggle.addEventListener('click', () => {
         wideMode = !wideMode;
