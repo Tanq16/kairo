@@ -1079,8 +1079,9 @@ function renderTree(nodes, container) {
         } else if (hasExt(node.name, ['.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar'])) {
             iconName = 'file-archive';
         }
+        const icon = document.createElement('i');
         icon.setAttribute('data-lucide', iconName);
-        icon.className = 'w-4 h-4';
+        icon.className = 'w-4 h-4 shrink-0';
         const name = document.createElement('span');
         name.textContent = node.name;
         row.appendChild(icon);
